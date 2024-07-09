@@ -1,0 +1,15 @@
+#Exclude all files from data & output but keep directory structure
+/data/**
+!/data/**/
+
+/output/**
+!/output/**/
+
+
+#Exclude tmp directory
+/tmp
+
+#Exlude RData etc
+/.RData
+/.Rhistory
+/.Rproj.user
