@@ -1,0 +1,434 @@
+---
+title: "ICE-A: Figure 1"
+output: 
+  html_notebook
+---
+# 1. Proximity vs interaction based annotation
+
+## 1.0 Preperations
+Run before:
+conda activate ice_analysis_env
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/anaconda3/envs/icea_analysis_env/lib
+
+Setting working directory
+```{r setup}
+knitr::opts_knit$set(root.dir = normalizePath("../../"))
+```
+
+
+Loading packages
+```{r}
+packages <- c("AnnotationDbi","org.Mm.eg.db", "clusterProfiler", "ggplot2", "ggpubr", "readxl", "tidyr", "tilingArray", "dplyr", "mltools", "stringr")
+lapply(packages, library, character.only = TRUE)
+```
+
+## 1.1 Intro to ICEA
+Explanatory figure of proximity vs interaction-based annotation
+
+## 1.2 Limitation of proximity
+
+### 1.2.1 Preproceesing for calcualtion of proximity/GREAT distance limitations
+TSS positions from: https://great-help.atlassian.net/wiki/spaces/GREAT/pages/655445/Genes
+Chom sizes from UCSC, filtered for chr 1-19, x,y
+Mouse (mm10)
+```{r}
+#Load tss regions from great
+tss.mm10 <- read.table("data/other/tss/GREATv4.genes.mm10.tsv", header=F, sep="\t")
+colnames(tss.mm10) <- c("ens", "chr", "tss", "strand", "gene")
+tss.mm10$type <- "gene"
+tss.mm10 <- tss.mm10[tss.mm10$chr != "chrM",]
+
+#Adding start/end positions
+chr.size.mm10 <- read.table("data/other/chr_sizes/mm10.chrom.sizes", header=F, sep="\t")
+colnames(chr.size.mm10) <- c("Chr", "Length")
+chr.start.end.mm10 <- rbind(data.frame(ens=rep("", nrow(chr.size.mm10)), chr= chr.size.mm10$Chr, tss=0, strand=rep("_",nrow(chr.size.mm10)), gene=rep("", nrow(chr.size.mm10)), type="start"), data.frame(ens=rep("", nrow(chr.size.mm10)), chr= chr.size.mm10$Chr, tss=chr.size.mm10$Length, strand=rep("_",nrow(chr.size.mm10)), gene=rep("", nrow(chr.size.mm10)), type="end"))
+tss.mm10 <- rbind(tss.mm10,chr.start.end.mm10 )
+
+#Proximity: Calculate gene regulatory domains
+tss.mm10.prox <- tss.mm10
+tss.mm10.prox <- tss.mm10.prox[order(tss.mm10.prox$chr, tss.mm10.prox$tss),]
+for (r in 1:nrow(tss.mm10)){
+  tss.mm10.prox[r, "dist_up"] <- ifelse(tss.mm10.prox[r,"strand"]=="+", ifelse(tss.mm10.prox[r-1,"type"]=="gene", (tss.mm10.prox[r,"tss"]-tss.mm10.prox[r-1,"tss"])/2, (tss.mm10.prox[r,"tss"]-tss.mm10.prox[r-1,"tss"])), ifelse(tss.mm10.prox[r+1,"type"]=="gene", -(tss.mm10.prox[r,"tss"]-tss.mm10.prox[r+1,"tss"])/2, -(tss.mm10.prox[r,"tss"]-tss.mm10.prox[r+1,"tss"])))
+  tss.mm10.prox[r, "dist_down"] <- ifelse(tss.mm10.prox[r,"strand"]=="+", ifelse(tss.mm10.prox[r+1,"type"]=="gene", -(tss.mm10.prox[r,"tss"]-tss.mm10.prox[r+1,"tss"])/2, -(tss.mm10.prox[r,"tss"]-tss.mm10.prox[r+1,"tss"])), ifelse(tss.mm10.prox[r-1,"type"]=="gene", (tss.mm10.prox[r,"tss"]-tss.mm10.prox[r-1,"tss"])/2, (tss.mm10.prox[r,"tss"]-tss.mm10.prox[r-1,"tss"])))
+tss.mm10.prox[r, "min"] <- ifelse(tss.mm10.prox[r,"strand"]=="+", tss.mm10.prox[r,]$tss-tss.mm10.prox[r,]$dist_up, tss.mm10.prox[r,]$tss-tss.mm10.prox[r,]$dist_down)
+tss.mm10.prox[r, "max"] <- ifelse(tss.mm10.prox[r,"strand"]=="+", tss.mm10.prox[r,]$tss+tss.mm10.prox[r,]$dist_down, tss.mm10.prox[r,]$tss+tss.mm10.prox[r,]$dist_up)
+}
+
+
+#GREAT: Calculate gene regulatory domains
+tss.mm10.great <- tss.mm10
+tss.mm10.great$tss_start <- ifelse(tss.mm10.great$strand=="+", tss.mm10.great$tss-5000, tss.mm10.great$tss-1000)
+tss.mm10.great$tss_start <- ifelse(tss.mm10.great$strand=="_", tss.mm10.great$tss, tss.mm10.great$tss_start)
+tss.mm10.great$tss_end <- ifelse(tss.mm10.great$strand=="+", tss.mm10.great$tss+1000, tss.mm10.great$tss+5000)
+tss.mm10.great$tss_end <- ifelse(tss.mm10.great$strand=="_", tss.mm10.great$tss, tss.mm10.great$tss_end)
+tss.mm10.great <- tss.mm10.great[order(tss.mm10.great$chr, tss.mm10.great$tss),]
+
+for (r in 1:nrow(tss.mm10.great)){
+tss.mm10.great[r, "dist_up"] <- ifelse(tss.mm10.great[r,"strand"]=="+", (tss.mm10.great[r,"tss"]-tss.mm10.great[r-1,"tss_end"]), -(tss.mm10.great[r,"tss"]-tss.mm10.great[r+1,"tss_start"]))
+  tss.mm10.great[r, "dist_up"] <- ifelse(tss.mm10.great[r, "dist_up"]<5000, 5000, tss.mm10.great[r, "dist_up"])
+
+tss.mm10.great[r, "dist_down"] <- ifelse(tss.mm10.great[r,"strand"]=="+",  -(tss.mm10.great[r,"tss"]-tss.mm10.great[r+1,"tss_start"]), (tss.mm10.great[r,"tss"]-tss.mm10.great[r-1,"tss_end"]))
+tss.mm10.great[r, "dist_down"] <- ifelse(tss.mm10.great[r, "dist_down"]<1000, 1000, tss.mm10.great[r, "dist_down"])
+    
+tss.mm10.great[r, "min"] <- ifelse(tss.mm10.great[r,"strand"]=="+", tss.mm10.great[r,]$tss-tss.mm10.great[r,]$dist_up, tss.mm10.great[r,]$tss-tss.mm10.great[r,]$dist_down)
+tss.mm10.great[r, "max"] <- ifelse(tss.mm10.great[r,"strand"]=="+", tss.mm10.great[r,]$tss+tss.mm10.great[r,]$dist_down, tss.mm10.great[r,]$tss+tss.mm10.great[r,]$dist_up)
+}
+
+#Add curated regions
+great.curated.regions<- read.table("data/other/tss/GREATv4.curatedRegDoms.mm10.txt", header=F, sep="\t")
+colnames(great.curated.regions) <- c("chr", "start","end", "ens", "entrez")
+for (i in great.curated.regions$ens){
+  tss.mm10.great[tss.mm10.great$ens %in% i, "min"] <- ifelse(tss.mm10.great[tss.mm10.great$ens %in% i,"min"]<great.curated.regions[great.curated.regions$ens %in% i,"start"], tss.mm10.great[tss.mm10.great$ens %in% i,"min"], great.curated.regions[great.curated.regions$ens %in% i,"start"])
+  tss.mm10.great[tss.mm10.great$ens %in% i, "max"] <- ifelse(tss.mm10.great[tss.mm10.great$ens %in% i,"max"]>great.curated.regions[great.curated.regions$ens %in% i,"end"], tss.mm10.great[tss.mm10.great$ens %in% i,"max"], great.curated.regions[great.curated.regions$ens %in% i,"end"])
+  tss.mm10.great[tss.mm10.great$ens %in% i, "dist_up"]  <- ifelse(tss.mm10.great[tss.mm10.great$ens %in% i, "strand"]=="+", (tss.mm10.great[tss.mm10.great$ens %in% i, "tss"]-tss.mm10.great[tss.mm10.great$ens %in% i, "min"]), (tss.mm10.great[tss.mm10.great$ens %in% i, "max"]-tss.mm10.great[tss.mm10.great$ens %in% i, "tss"]))
+  tss.mm10.great[tss.mm10.great$ens %in% i, "dist_down"]  <- ifelse(tss.mm10.great[tss.mm10.great$ens %in% i, "strand"]=="+", (tss.mm10.great[tss.mm10.great$ens %in% i, "max"]-tss.mm10.great[tss.mm10.great$ens %in% i, "tss"]), (tss.mm10.great[tss.mm10.great$ens %in% i, "tss"]-tss.mm10.great[tss.mm10.great$ens %in% i, "min"]))
+}
+```
+
+
+
+Human (Hg38)
+```{r}
+#Load tss regions from great
+tss.hg38 <- read.table("data/other/tss/GREATv4.genes.hg38.tsv", header=F, sep="\t")
+colnames(tss.hg38) <- c("ens", "chr", "tss", "strand", "gene")
+tss.hg38$type <- "gene"
+tss.hg38 <- tss.hg38[tss.hg38$chr != "chrM",]
+
+#Adding start/end positions
+chr.size.hg38 <- read.table("data/other/chr_sizes/hg38.chrom.sizes", header=F, sep="\t")
+colnames(chr.size.hg38) <- c("Chr", "Length")
+chr.start.end.hg38 <- rbind(data.frame(ens=rep("", nrow(chr.size.hg38)), chr= chr.size.hg38$Chr, tss=0, strand=rep("_",nrow(chr.size.hg38)), gene=rep("", nrow(chr.size.hg38)), type="start"), data.frame(ens=rep("", nrow(chr.size.hg38)), chr= chr.size.hg38$Chr, tss=chr.size.hg38$Length, strand=rep("_",nrow(chr.size.hg38)), gene=rep("", nrow(chr.size.hg38)), type="end"))
+tss.hg38 <- rbind(tss.hg38,chr.start.end.hg38 )
+
+#Proximity: Calculate gene regulatory domains
+tss.hg38.prox <- tss.hg38
+tss.hg38.prox <- tss.hg38.prox[order(tss.hg38.prox$chr, tss.hg38.prox$tss),]
+for (r in 1:nrow(tss.hg38)){
+  tss.hg38.prox[r, "dist_up"] <- ifelse(tss.hg38.prox[r,"strand"]=="+", ifelse(tss.hg38.prox[r-1,"type"]=="gene", (tss.hg38.prox[r,"tss"]-tss.hg38.prox[r-1,"tss"])/2, (tss.hg38.prox[r,"tss"]-tss.hg38.prox[r-1,"tss"])), ifelse(tss.hg38.prox[r+1,"type"]=="gene", -(tss.hg38.prox[r,"tss"]-tss.hg38.prox[r+1,"tss"])/2, -(tss.hg38.prox[r,"tss"]-tss.hg38.prox[r+1,"tss"])))
+  tss.hg38.prox[r, "dist_down"] <- ifelse(tss.hg38.prox[r,"strand"]=="+", ifelse(tss.hg38.prox[r+1,"type"]=="gene", -(tss.hg38.prox[r,"tss"]-tss.hg38.prox[r+1,"tss"])/2, -(tss.hg38.prox[r,"tss"]-tss.hg38.prox[r+1,"tss"])), ifelse(tss.hg38.prox[r-1,"type"]=="gene", (tss.hg38.prox[r,"tss"]-tss.hg38.prox[r-1,"tss"])/2, (tss.hg38.prox[r,"tss"]-tss.hg38.prox[r-1,"tss"])))
+tss.hg38.prox[r, "min"] <- ifelse(tss.hg38.prox[r,"strand"]=="+", tss.hg38.prox[r,]$tss-tss.hg38.prox[r,]$dist_up, tss.hg38.prox[r,]$tss-tss.hg38.prox[r,]$dist_down)
+tss.hg38.prox[r, "max"] <- ifelse(tss.hg38.prox[r,"strand"]=="+", tss.hg38.prox[r,]$tss+tss.hg38.prox[r,]$dist_down, tss.hg38.prox[r,]$tss+tss.hg38.prox[r,]$dist_up)
+}
+
+#GREAT: Calculate gene regulatory domains
+tss.hg38.great <- tss.hg38
+tss.hg38.great$tss_start <- ifelse(tss.hg38.great$strand=="+", tss.hg38.great$tss-5000, tss.hg38.great$tss-1000)
+tss.hg38.great$tss_start <- ifelse(tss.hg38.great$strand=="_", tss.hg38.great$tss, tss.hg38.great$tss_start)
+tss.hg38.great$tss_end <- ifelse(tss.hg38.great$strand=="+", tss.hg38.great$tss+1000, tss.hg38.great$tss+5000)
+tss.hg38.great$tss_end <- ifelse(tss.hg38.great$strand=="_", tss.hg38.great$tss, tss.hg38.great$tss_end)
+tss.hg38.great <- tss.hg38.great[order(tss.hg38.great$chr, tss.hg38.great$tss),]
+
+for (r in 1:nrow(tss.hg38.great)){
+tss.hg38.great[r, "dist_up"] <- ifelse(tss.hg38.great[r,"strand"]=="+", (tss.hg38.great[r,"tss"]-tss.hg38.great[r-1,"tss_end"]), -(tss.hg38.great[r,"tss"]-tss.hg38.great[r+1,"tss_start"]))
+  tss.hg38.great[r, "dist_up"] <- ifelse(tss.hg38.great[r, "dist_up"]<5000, 5000, tss.hg38.great[r, "dist_up"])
+
+tss.hg38.great[r, "dist_down"] <- ifelse(tss.hg38.great[r,"strand"]=="+",  -(tss.hg38.great[r,"tss"]-tss.hg38.great[r+1,"tss_start"]), (tss.hg38.great[r,"tss"]-tss.hg38.great[r-1,"tss_end"]))
+tss.hg38.great[r, "dist_down"] <- ifelse(tss.hg38.great[r, "dist_down"]<1000, 1000, tss.hg38.great[r, "dist_down"])
+    
+tss.hg38.great[r, "min"] <- ifelse(tss.hg38.great[r,"strand"]=="+", tss.hg38.great[r,]$tss-tss.hg38.great[r,]$dist_up, tss.hg38.great[r,]$tss-tss.hg38.great[r,]$dist_down)
+tss.hg38.great[r, "max"] <- ifelse(tss.hg38.great[r,"strand"]=="+", tss.hg38.great[r,]$tss+tss.hg38.great[r,]$dist_down, tss.hg38.great[r,]$tss+tss.hg38.great[r,]$dist_up)
+}
+
+#Add curated regions
+great.curated.regions<- read.table("data/other/tss/GREATv4.curatedRegDoms.hg38.txt", header=F, sep="\t")
+colnames(great.curated.regions) <- c("chr", "start","end", "ens", "entrez")
+for (i in great.curated.regions$ens){
+  tss.hg38.great[tss.hg38.great$ens %in% i, "min"] <- ifelse(tss.hg38.great[tss.hg38.great$ens %in% i,"min"]<great.curated.regions[great.curated.regions$ens %in% i,"start"], tss.hg38.great[tss.hg38.great$ens %in% i,"min"], great.curated.regions[great.curated.regions$ens %in% i,"start"])
+  tss.hg38.great[tss.hg38.great$ens %in% i, "max"] <- ifelse(tss.hg38.great[tss.hg38.great$ens %in% i,"max"]>great.curated.regions[great.curated.regions$ens %in% i,"end"], tss.hg38.great[tss.hg38.great$ens %in% i,"max"], great.curated.regions[great.curated.regions$ens %in% i,"end"])
+  tss.hg38.great[tss.hg38.great$ens %in% i, "dist_up"]  <- ifelse(tss.hg38.great[tss.hg38.great$ens %in% i, "strand"]=="+", (tss.hg38.great[tss.hg38.great$ens %in% i, "tss"]-tss.hg38.great[tss.hg38.great$ens %in% i, "min"]), (tss.hg38.great[tss.hg38.great$ens %in% i, "max"]-tss.hg38.great[tss.hg38.great$ens %in% i, "tss"]))
+  tss.hg38.great[tss.hg38.great$ens %in% i, "dist_down"]  <- ifelse(tss.hg38.great[tss.hg38.great$ens %in% i, "strand"]=="+", (tss.hg38.great[tss.hg38.great$ens %in% i, "max"]-tss.hg38.great[tss.hg38.great$ens %in% i, "tss"]), (tss.hg38.great[tss.hg38.great$ens %in% i, "tss"]-tss.hg38.great[tss.hg38.great$ens %in% i, "min"]))
+}
+```
+
+Calculate statistics
+```{r}
+#Calculate statistics
+#Mouse
+tss.mm10.prox <- tss.mm10.prox[tss.mm10.prox$type=="gene",]
+tss.mm10.prox$reg <- tss.mm10.prox$dist_up+tss.mm10.prox$dist_down
+tss.mm10.prox$maxdist <- pmax(tss.mm10.prox$dist_up, tss.mm10.prox$dist_down)
+tss.mm10.prox$mindist <- pmin(tss.mm10.prox$dist_up, tss.mm10.prox$dist_down)
+tss.mm10.prox$meandist <- rowMeans(tss.mm10.prox[,c("mindist", "maxdist")])
+tss.mm10.prox$anno="PROXIMITY"
+tss.mm10.prox$species="Mouse"
+
+
+tss.mm10.great <- tss.mm10.great[tss.mm10.great$type=="gene",]
+tss.mm10.great$reg <- tss.mm10.great$dist_up+tss.mm10.great$dist_down
+tss.mm10.great$maxdist <- pmax(tss.mm10.great$dist_up, tss.mm10.great$dist_down)
+tss.mm10.great$mindist <- pmin(tss.mm10.great$dist_up, tss.mm10.great$dist_down)
+tss.mm10.great$meandist <- rowMeans(tss.mm10.great[,c("mindist", "maxdist")])
+tss.mm10.great$anno="GREAT"
+tss.mm10.great$species="Mouse"
+
+#Huamn
+tss.hg38.prox <- tss.hg38.prox[tss.hg38.prox$type=="gene",]
+tss.hg38.prox$reg <- tss.hg38.prox$dist_up+tss.hg38.prox$dist_down
+tss.hg38.prox$maxdist <- pmax(tss.hg38.prox$dist_up, tss.hg38.prox$dist_down)
+tss.hg38.prox$mindist <- pmin(tss.hg38.prox$dist_up, tss.hg38.prox$dist_down)
+tss.hg38.prox$meandist <- rowMeans(tss.hg38.prox[,c("mindist", "maxdist")])
+tss.hg38.prox$anno="PROXIMITY"
+tss.hg38.prox$species="Human"
+
+tss.hg38.great <- tss.hg38.great[tss.hg38.great$type=="gene",]
+tss.hg38.great$reg <- tss.hg38.great$dist_up+tss.hg38.great$dist_down
+tss.hg38.great$maxdist <- pmax(tss.hg38.great$dist_up, tss.hg38.great$dist_down)
+tss.hg38.great$mindist <- pmin(tss.hg38.great$dist_up, tss.hg38.great$dist_down)
+tss.hg38.great$meandist <- rowMeans(tss.hg38.great[,c("mindist", "maxdist")])
+tss.hg38.great$anno="GREAT"
+tss.hg38.great$species="Human"
+
+
+#Print statistics
+#Mouse
+print("Mouse (Mm10)")
+print(paste0("Median max distance Proximity: ",median(tss.mm10.prox[!is.na(tss.mm10.prox$maxdist),]$maxdist)))
+print(paste0("Median max distance GREAT: ",median(tss.mm10.great[!is.na(tss.mm10.great$maxdist),]$maxdist)))
+
+print(paste0("Median min distance Proximity: ",median(tss.mm10.prox[!is.na(tss.mm10.prox$maxdist),]$mindist)))
+print(paste0("Median min distance GREAT: ",median(tss.mm10.great[!is.na(tss.mm10.great$maxdist),]$mindist)))
+
+print(paste0("Median average distance Proximity: ",median(tss.mm10.prox[!is.na(tss.mm10.prox$maxdist),]$meandist)))
+print(paste0("Median average distance GREAT: ",median(tss.mm10.great[!is.na(tss.mm10.great$maxdist),]$meandist)))
+
+print(paste0("Median upstream distance Proximity: ",median(tss.mm10.prox[!is.na(tss.mm10.prox$maxdist),]$dist_up)))
+print(paste0("Median upstream distance GREAT: ",median(tss.mm10.great[!is.na(tss.mm10.great$maxdist),]$dist_up)))
+
+print(paste0("Median downstream distance Proximity: ",median(tss.mm10.prox[!is.na(tss.mm10.prox$maxdist),]$dist_down)))
+print(paste0("Median downstream distance GREAT: ",median(tss.mm10.great[!is.na(tss.mm10.great$maxdist),]$dist_down)))
+
+print(paste0("% over 100kb Proximity: ",nrow(tss.mm10.prox[!is.na(tss.mm10.prox$maxdist) & tss.mm10.prox$maxdist>100000,])/nrow(tss.mm10.prox[!is.na(tss.mm10.prox$maxdist),])))
+print(paste0("% over 100kb GREAT: ",nrow(tss.mm10.great[!is.na(tss.mm10.great$maxdist) & tss.mm10.great$maxdist>100000,])/nrow(tss.mm10.great[!is.na(tss.mm10.great$maxdist),])))
+
+#Human
+print("Human (Hg38)")
+print(paste0("Median max distance Proximity: ",median(tss.hg38.prox[!is.na(tss.hg38.prox$maxdist),]$maxdist)))
+print(paste0("Median max distance GREAT: ",median(tss.hg38.great[!is.na(tss.hg38.great$maxdist),]$maxdist)))
+
+print(paste0("Median min distance Proximity: ",median(tss.hg38.prox[!is.na(tss.hg38.prox$maxdist),]$mindist)))
+print(paste0("Median min distance GREAT: ",median(tss.hg38.great[!is.na(tss.hg38.great$maxdist),]$mindist)))
+
+print(paste0("Median average distance Proximity: ",median(tss.hg38.prox[!is.na(tss.hg38.prox$maxdist),]$meandist)))
+print(paste0("Median average distance GREAT: ",median(tss.hg38.great[!is.na(tss.hg38.great$maxdist),]$meandist)))
+
+print(paste0("Median upstream distance Proximity: ",median(tss.hg38.prox[!is.na(tss.hg38.prox$maxdist),]$dist_up)))
+print(paste0("Median upstream distance GREAT: ",median(tss.hg38.great[!is.na(tss.hg38.great$maxdist),]$dist_up)))
+
+print(paste0("Median downstream distance Proximity: ",median(tss.hg38.prox[!is.na(tss.hg38.prox$maxdist),]$dist_down)))
+print(paste0("Median downstream distance GREAT: ",median(tss.hg38.great[!is.na(tss.hg38.great$maxdist),]$dist_down)))
+
+print(paste0("% over 100kb Proximity: ",nrow(tss.hg38.prox[!is.na(tss.hg38.prox$maxdist) & tss.hg38.prox$maxdist>100000,])/nrow(tss.hg38.prox[!is.na(tss.hg38.prox$maxdist),])))
+print(paste0("% over 100kb GREAT: ",nrow(tss.hg38.great[!is.na(tss.hg38.great$maxdist) & tss.hg38.great$maxdist>100000,])/nrow(tss.hg38.great[!is.na(tss.hg38.great$maxdist),])))
+
+```
+
+Merge data
+```{r}
+tss.comb <- rbind(tss.mm10.prox, tss.mm10.great[,c(1:6, 9:18)], tss.hg38.prox, tss.hg38.great[,c(1:6, 9:18)])
+tss.comb$anno <- factor(tss.comb$anno, levels=c("PROXIMITY", "GREAT"))
+tss.comb$species <- factor(tss.comb$species, levels=c("Mouse", "Human"))
+tss.comb[, c(7:8,11:14)][tss.comb[, c(7:8,11:14)] == 0] <- 1
+```
+
+
+### 1.2.2 Max distance for CRE annotation
+Violin plot of max  distance (Figure 1B)
+```{r}
+plot.violin.maxdistance<-ggplot(tss.comb, aes(x=anno, y=dist_down, fill=anno))+
+  geom_violin(color="black")+
+  annotate("rect", xmin=0, xmax=3, ymin=0, ymax=100000, alpha=0.6, fill="white")+
+  geom_violin(color="black", alpha=0)+
+  geom_boxplot(width=0.1, color="black", alpha=0)+
+  geom_hline(yintercept=100000, linetype="dashed" ) + 
+  scale_y_log10(breaks=c(10, 100, 1000, 10000, 100000, 1000000), labels= c("0.01 kb ", "0.1 kb ", "1 kb ", "10 kb ", "100 kb ", "1 Mb "), limits=c(1,1e7), expand=c(0,0))+TG_theme()+
+  xlab("")+ylab("Maximum distance for\nCRE annotation")+
+  theme(axis.title.y=element_text(size=20), axis.text.x = element_text(size=14, colour ="black", angle = 45, hjust = 1, vjust = 0.9), axis.text.y = element_text(size=14, colour ="black"), legend.position = "none", aspect.ratio = 1.75)+
+    scale_fill_manual(name="Annotation",values = c("grey75", "grey25"))+
+  facet_grid(. ~ species)
+
+
+ggsave(path="output/plots/figure1", filename="Max_distance_threshold_for_CRE_annotation.pdf", plot = plot.violin.maxdistance, device = "pdf", dpi=300)
+```
+
+
+### 1.2.3 Median upper distance for CRE annotation
+Barplot of median upper distance (Figure 1C)
+```{r}
+tss.comb.up.down <- rbind(data.frame(tss.comb[,c(1:6,15,16)], dist=tss.comb$dist_up, direction="Upstream"), data.frame(tss.comb[,c(1:6,15,16)], dist=tss.comb$dist_down, direction="Downstream"))
+tss.comb.up.down$direction <- factor(tss.comb.up.down$direction, levels=c("Upstream", "Downstream"))
+tss.comb.up.down.median <- aggregate(dist ~ anno+ species+ direction, data=tss.comb.up.down[,7:10], FUN=median)
+
+source("script/general/r_functions/TG_theme.R")
+plot.box.updowndist<-ggplot(tss.comb.up.down.median , aes(x=anno, y=dist, fill=anno))+
+  geom_bar(stat="identity", color="black", width = 0.75)+
+  scale_y_continuous(breaks=c(0,25000, 50000), labels= c("0 kb ", "25 kb ", "50 kb "), limits=c(0,65000), expand=c(0,0))+
+  xlab("")+ylab("Maximum distance for\nCRE annotation")+
+  TG_theme(aspect.ratio = 4)+
+  theme(axis.title.y=element_text(size=20), axis.text.x = element_text(size=14, colour ="black", angle = 45, hjust = 1, vjust = 0.9), axis.text.y = element_text(size=14, colour ="black"), legend.position = "none", aspect.ratio = 1.75)+
+    scale_fill_manual(name="Annotation",values = c("grey75", "grey25"))+
+  facet_grid(species ~ direction)
+
+ggsave(path="output/plots/figure1", filename="Distance_threshold_for_CRE_annotation.pdf", plot = plot.box.updowndist, device = "pdf", dpi=300)
+```
+
+
+# 1.3 Benchmarking using validated enhancers in K562 cells
+
+## 1.3.1 Indetification of experimentally validadted enhancers
+Load and filter significant enhancers from Fulco et al. 2019
+```{r}
+# Load Enhancer.Promoter interaction 
+Enh.Prom.pairs <- read_excel("data/other/K562_enhancers/41588_2019_538_MOESM3_ESM.xlsx", sheet="Supplementary Table 3a", skip=1)
+Enh.Prom.pairs$peakID <- paste(Enh.Prom.pairs$chr, ":", Enh.Prom.pairs$start, "-", Enh.Prom.pairs$end, sep = "")
+
+# Filter valid enhancer-gene pairs (Enhancers overlaping bounds of gene removed)
+Enh.Prom.pairs <- Enh.Prom.pairs[Enh.Prom.pairs$`Valid E-G connection` == TRUE,]
+
+# Loading gene info and merging with enhancer-gene pairs
+Gene.info <- read_excel("data/other/K562_enhancers/41588_2019_538_MOESM3_ESM.xlsx", sheet="Supplementary Table 5b", skip=1)
+Enh.Prom.pairs <- merge(Enh.Prom.pairs, Gene.info, by="Gene", all.x=TRUE, suffixes=c("", "_TSS"))
+
+# Calculate distance between peak center and corresponding TSS 
+Enh.Prom.pairs$TSS <- as.numeric(ifelse(Enh.Prom.pairs$strand == "+", Enh.Prom.pairs$start_TSS, Enh.Prom.pairs$end_TSS))
+Enh.Prom.pairs$DistanceTSS <- ((Enh.Prom.pairs$start + Enh.Prom.pairs$end)/2)-Enh.Prom.pairs$TSS 
+
+# Filter pairs based on distance to TSS: Max distance to TSS set to 3Mb (based on FitHiChIP analysis)
+Enh.Prom.pairs <- Enh.Prom.pairs[abs(Enh.Prom.pairs$DistanceTSS) <= 3000000,]
+Enh.Prom.pairs$id <- paste0(Enh.Prom.pairs$peakID, "_", Enh.Prom.pairs$Gene)
+Enh.Prom.pairs <- Enh.Prom.pairs[!duplicated(Enh.Prom.pairs$id),]
+
+#Distance bins
+Enh.Prom.pairs$DistanceBin <- bin_data(abs(Enh.Prom.pairs$DistanceTSS), bins=c(0, 10000, 50000, 150000,3000000), binType = "explicit")
+
+# Writing bed files for filtered enhancer-gene pairs for annotation
+Enh.Prom.pairs.bed <- unique(Enh.Prom.pairs[,c("chr", "start", "end", "peakID")])
+write.table(Enh.Prom.pairs.bed, file="output/data/figure1/K562_Enhancers_filtered.bed", quote=FALSE, sep="\t", col.names=FALSE, row.names=FALSE)
+
+# Significant enhancer-gene pairs
+Enh.Prom.pairs.sign <- Enh.Prom.pairs[Enh.Prom.pairs$Significant==TRUE,]
+
+```
+
+
+## 1.3.2 Annotation of OCRs
+HOMER proximity annotation 
+```{bash engine.opts='-l'}
+cd output/data/figure1/annotation
+annotatePeaks.pl ../K562_Enhancers_filtered.bed hg19 > K562_Enhancers_HOMER_annotated.txt
+awk -v FS='\t' -v OFS='\t' '{print $1, $16, $10}' K562_Enhancers_HOMER_annotated.txt > K562_Enhancers_HOMER_annotated_cut.txt
+```
+
+```{r}
+Enh.anno.HOMER <- read.table("output/data/figure1/annotation/K562_Enhancers_HOMER_annotated_cut.txt", header=TRUE, sep="\t", quote="")
+names(Enh.anno.HOMER)[1] <- 'peakID'
+Enh.anno.HOMER$id <- paste0(Enh.anno.HOMER$peakID, "_", Enh.anno.HOMER$Gene)
+Enh.anno.HOMER <- Enh.anno.HOMER[!duplicated(Enh.anno.HOMER$id),]
+```
+
+GREAT annotation
+Run great using default settings (except Default settings
+```{r}
+Enh.anno.GREAT <- read.table("output/data/figure1/annotation/K562_Enhancers_GREAT_annotated.txt", header=F, sep="\t", quote="")
+colnames(Enh.anno.GREAT) <- c("peakID", "Gene")
+Enh.anno.GREAT <- mutate(Enh.anno.GREAT,Gene = strsplit(Gene, ", ")) %>% unnest(Gene) %>% separate(Gene, c('Gene', 'DistanceTSS'), sep=" \\(")
+Enh.anno.GREAT$DistanceTSS <- str_replace(Enh.anno.GREAT$DistanceTSS,
+                        pattern = "\\)",
+                        replacement = "")
+Enh.anno.GREAT$DistanceTSS <- as.numeric(Enh.anno.GREAT$DistanceTSS)
+Enh.anno.GREAT$id <- paste0(Enh.anno.GREAT$peakID, "_", Enh.anno.GREAT$Gene)
+Enh.anno.GREAT <- Enh.anno.GREAT[!duplicated(Enh.anno.GREAT$id),]
+```
+
+
+ICE-A interaction-based annotation of OCRs
+```{bash engine.opts='-l'}
+script_dir="script/figure1"
+bash $script_dir/ICEA_GSE101498_K562_HiChIP_H3K27ac_K562_enhancers_annotation.sh
+```
+
+```{r}
+Enh.anno.ICEA <- read.table("output/data/figure1/annotation/K562_enhancers_HiChIP_H3K27ac_annotation/Peak_annotation/K562_enhancers/K562_enhancers_PLACseq_annotated.txt", header=TRUE, sep="\t", quote="")
+
+Enh.anno.ICEA$peakID <- paste(Enh.anno.ICEA$Chr, ":", Enh.anno.ICEA$Start, "-", Enh.anno.ICEA$End, sep = "")
+Enh.anno.ICEA$id <- paste0(Enh.anno.ICEA$peakID, "_", Enh.anno.ICEA$Gene)
+Enh.anno.ICEA <- Enh.anno.ICEA[!duplicated(Enh.anno.ICEA$id),]
+```
+
+
+
+### 2.2.3 Comparison in the ability to indetify enhancers in distance ranges
+Calculate percentage of identified enhancers, split into distance ranges
+```{r}
+Enh.Prom.pairs.sig <- Enh.Prom.pairs[Enh.Prom.pairs$Significant==1,]
+Enh.Prom.pairs.sig$PROXIMITY <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.HOMER$id, 1, 0)
+Enh.Prom.pairs.sig$GREAT <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.GREAT$id, 1, 0)
+Enh.Prom.pairs.sig$ICEA <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.ICEA$id, 1, 0)
+
+Enh.Prom.pairs.sig.summary <- gather(Enh.Prom.pairs.sig[c(1,27:31)], method, count, PROXIMITY:ICEA, factor_key=TRUE)
+Enh.Prom.pairs.sig.summary$method <- factor(Enh.Prom.pairs.sig.summary$method, levels=c("PROXIMITY", "GREAT","ICEA"))
+Enh.Prom.pairs.sig.summary.element <- Enh.Prom.pairs.sig.summary %>% 
+  dplyr::group_by(DistanceBin, method) %>% 
+  dplyr::count(count, .drop=F) %>% 
+  dplyr::mutate(percent= n/sum(n))
+```
+
+Barplot
+```{r}
+dist.lab <- c("<10kb", "10-50kb", "50-150kb", ">150kp") 
+names(dist.lab) = unique(Enh.Prom.pairs.sig.summary$DistanceBin)
+
+Enh.plot <-ggplot(data=Enh.Prom.pairs.sig.summary.element[Enh.Prom.pairs.sig.summary.element$count==1,], aes(x=method, y=percent, fill=method)) +
+  geom_bar(stat="identity", position=position_dodge(width = 0.5), width=0.8, color="black")+
+  facet_wrap(. ~ DistanceBin, nrow=1,   labeller = labeller(DistanceBin = dist.lab), strip.position = "bottom")+
+  scale_x_discrete(breaks=c("PROXIMITY", "GREAT","ICEA"), labels=c("", "", ""))+
+  xlab("")+
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1), name="% Enhancers identified", expand = c(0,0))+
+  labs(y = "Percent", fill="method")+
+  TG_theme(aspect.ratio=3)+
+  #scale_fill_viridis_d(name="Annotation",alpha = 1,begin = 0, end = 1,direction = -1,option = "D",aesthetics = "fill")+
+  theme(axis.title.y=element_text(size=20), axis.text.y = element_text(size=14), legend.position="right", legend.title = element_blank(), legend.text = element_text(size = 10),  strip.text.x =element_text(size = 16),
+        strip.placement = "outside",  legend.box.margin=margin(-200,0,-25,-100))+
+  scale_fill_manual(values = c("grey", "black", "#3bab66"))
+
+ggsave(path="output/plots/figure1", filename="K562_enhancer_annotation_element_based.pdf", plot = Enh.plot, device = "pdf", dpi=300)
+
+```
+
+## 2.3 Gene level enhancer indetificantion increased with “ICEA”
+Calculate  enhancer identification per gene
+```{r}
+Enh.Prom.pairs.sig.summary.gene.prom <- Enh.Prom.pairs.sig.summary[Enh.Prom.pairs.sig.summary$DistanceBin=="[0, 10000)",] %>% 
+  dplyr::group_by(Gene, method) %>% 
+  dplyr::count(count, .drop=F) %>% 
+  dplyr::mutate(percent= n/sum(n))
+Enh.Prom.pairs.sig.summary.gene.prom <- Enh.Prom.pairs.sig.summary.gene.prom[Enh.Prom.pairs.sig.summary.gene.prom$count==1,]
+
+Enh.Prom.pairs.sig.summary.gene.dist <- Enh.Prom.pairs.sig.summary[Enh.Prom.pairs.sig.summary$DistanceBin!="[0, 10000)",] %>% 
+  dplyr::group_by(Gene, method) %>% 
+  dplyr::count(count, .drop=F) %>% 
+  dplyr::mutate(Percent= n/sum(n))
+Enh.Prom.pairs.sig.summary.gene.dist <- Enh.Prom.pairs.sig.summary.gene.dist[Enh.Prom.pairs.sig.summary.gene.dist$count==1,]
+```
+
+Dotplot
+```{r}
+Gene.plot <- ggplot(Enh.Prom.pairs.sig.summary.gene.dist,aes(x=method,y=Gene)) +geom_point(aes(size=n,color=Percent))+
+  scale_size(range = c(1,6))+
+  TG_theme()+
+  xlab("")+
+  TG_theme(aspect.ratio=1)+
+  scale_color_gradient(low="#d12027", high="black")+
+  #scale_color_gradient(low="#b81965", high="black")+
+  theme(axis.title.y=element_blank(), axis.title.x=element_blank(), axis.text.y = element_text(size=14), legend.text = element_text(size = 10),  legend.title = element_text(size=16, face = "bold"))
+
+ggsave(path="output/plots/figure1", filename="K562_enhancer_annotation_gene_based.pdf", plot = Gene.plot, device = "pdf", dpi=300)
+
+```
+
+
+## 2.4 Example of situation where only interaction-based annotation identify elements 
+Browser track of the Gata1 locus
+
+
+

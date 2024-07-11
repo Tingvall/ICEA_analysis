@@ -1,0 +1,615 @@
+---
+title: "ICE-A: Figure 2"
+output: 
+  html_notebook
+    #toc: true
+---
+# 2. B/T elements
+
+## 2.0 Preperations
+Run before:
+conda activate icea_analysis_env
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/anaconda3/envs/icea_analysis_env/lib
+
+Setting working directory
+```{r setup}
+knitr::opts_knit$set(root.dir = normalizePath("./"))
+```
+
+
+Loading packages
+```{r}
+#Loading libraries
+packages <- c("tidyr", "dplyr", "stringr", "DESeq2", "tximport", "AnnotationDbi", "org.Mm.eg.db", "circlize", "viridis", "ComplexHeatmap", "clusterProfiler", "DiffBind", "ggplot2", "ggpubr")
+lapply(packages, library, character.only = TRUE)
+```
+
+
+## 2.1 Identification of B/T gene list
+### 2.1.1 Differntial genes FrBC vs DN2b
+```{r}
+#Import Immgen RNAseq data
+files.rna.immgen <- list.files(path = "data/rna/immgen/counts", pattern = "genes.results$", full.names = T)
+names(files.rna.immgen) <- sub(".Aligned.toTranscriptome.rsem.out.genes.results", "",list.files(path = "data/rna/immgen/counts", pattern = "genes.results$"))
+names(files.rna.immgen) <- c(names(files.rna.immgen[1:15]), "LTHSC_34neg_1", "LTHSC_34neg_2", "LTHSC_34pos_1", "LTHSC_34pos_2", names(files.rna.immgen[20:23]))
+files.rna.immgen <- files.rna.immgen[c(16:19, 22:23, 20:21, 1:2, 10:15, 3:9)]
+txi.rna.rna.immgen <- tximport(files.rna.immgen, type="rsem", txIn = F, txOut = F, importer = read.delim)
+
+#Convert to entrezID & filter
+counts.rna.immgen <- data.frame(ensembl=str_replace(rownames(txi.rna.rna.immgen$counts), pattern="\\.[0-9]+_.*$", replacement = ""), txi.rna.rna.immgen$counts)
+counts.rna.immgen$entrezID <- mapIds(org.Mm.eg.db, keys = counts.rna.immgen$ensembl, column = "ENTREZID", keytype = "ENSEMBL")
+counts.rna.immgen <- aggregate(. ~entrezID, data=counts.rna.immgen[,-1], sum)
+rownames(counts.rna.immgen) <- counts.rna.immgen$entrezID
+counts.rna.immgen <- counts.rna.immgen[,-1]
+counts.rna.immgen <- round(counts.rna.immgen, 0)
+counts.rna.immgen <- counts.rna.immgen[rowSums(counts.rna.immgen >= 10) >= 2,]
+
+#Create coldata
+coldata.rna.immgen <- data.frame(sampleID=colnames(counts.rna.immgen), celltype=c(rep(c("LTHSC_34neg","LTHSC_34pos","STHSC","MPP4","CLP","FrA","FrBC", "FrE", "DN1"),each=2),"DN2a", rep(c("DN2b", "DN3"), each=2)), replicate=c(rep(c(1,2), 9), 1, 1,2,1,2))
+coldata.rna.immgen$celltype <- factor(coldata.rna.immgen$celltype, levels = c("LTHSC_34neg","LTHSC_34pos","STHSC","MPP4","CLP","FrA","FrBC", "FrE", "DN1","DN2a", "DN2b", "DN3"))
+
+#Save data
+save(counts.rna.immgen, file="output/rdata/figure2/counts.rna.immgen.Rdata")
+load(file="output/rdata/figure2/counts.rna.immgen.Rdata")
+save(coldata.rna.immgen, file="output/rdata/figure2/coldata.rna.immgen.Rdata")
+load(file="output/rdata/figure2/coldata.rna.immgen.Rdata")
+
+#Identify differntially expressed genes between FrBC and DN2b
+source("script/general/r_functions/DESeq2_fun.R")
+DESeq2_fun(counts = counts.rna.immgen, coldata = coldata.rna.immgen, selection = c(13,14,20,21), factor="celltype", groups = c("DN2b", "FrBC"), filt=T, filt_n = 2, filt_value = 10, mapID = T, orgdb = org.Mm.eg.db)
+DE.FrBCvsDN2b.result.diff <- DE.FrBCvsDN2b.result.df[abs(DE.FrBCvsDN2b.result.df$log2FoldChange)> 2 & !is.na(DE.FrBCvsDN2b.result.df$padj) & DE.FrBCvsDN2b.result.df$padj<0.01,]
+```
+
+### 3.1.2 Clustering of differntial genes within lymmphoid popualtions
+```{r}
+#Identify clusters of differential expressed genes
+dds.rna.immgen <- DESeqDataSetFromMatrix(countData = counts.rna.immgen, colData = coldata.rna.immgen, design = ~ celltype)
+dds.rna.immgen <- DESeq(dds.rna.immgen)
+vst.rna.immgen <- vst(dds.rna.immgen)
+vst.rna.immgen.df <- data.frame(assay(vst.rna.immgen))
+
+vst.rna.immgen.mean <- data.frame(LTHSC_34neg=rowMeans(vst.rna.immgen.df[,1:2]), LTHSC_34pos=rowMeans(vst.rna.immgen.df[,3:4]), STHSC=rowMeans(vst.rna.immgen.df[,5:6]), MPP4=rowMeans(vst.rna.immgen.df[,7:8]),CLP=rowMeans(vst.rna.immgen.df[,9:10]),FrA=rowMeans(vst.rna.immgen.df[,11:12]), FrBC=rowMeans(vst.rna.immgen.df[,13:14]), FrE=rowMeans(vst.rna.immgen.df[,15:16]), DN1=rowMeans(vst.rna.immgen.df[,17:18]),DN2a=vst.rna.immgen.df[,19], DN2b=rowMeans(vst.rna.immgen.df[,20:21]), DN3=rowMeans(vst.rna.immgen.df[,22:23]))
+vst.rna.immgen.z <- as.data.frame(vst.rna.immgen.mean-rowMeans(vst.rna.immgen.mean))/rowSds(as.matrix(vst.rna.immgen.mean))
+vst.rna.immgen.z <- na.omit(vst.rna.immgen.z)
+vst.rna.immgen.z.BT <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% DE.FrBCvsDN2b.result.diff$row, ]
+
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
+set.seed(12)
+col <- colorRamp2(c(-3.5, -1.75, 0, 1.75, 3.5),colors = c("#1f426a", "#8f9bb2", "white", "#b58ea7", "#6a2456"))
+BT.heatmap <- Heatmap(vst.rna.immgen.z.BT, col=col, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = c("#818284", "#1f426a", "#6a2456"))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontsize=8, fontface="bold"), labels_gp=gpar( fontsize=6)), row_title_gp = gpar( fontsize=8, fontface="bold"), raster_device="CairoPNG")
+
+set.seed(4)
+BT.heatmap <-draw(BT.heatmap, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+
+cairo_pdf("output/plots/plots_3/B_T_genes_heatmap.pdf")
+BT.heatmap
+dev.off()
+
+#Extracting clusters
+BT.cluster.list <- row_order(BT.heatmap) 
+BT.clusters <- lapply(names(BT.cluster.list), function(i){
+   out <- data.frame(entrezID = rownames(vst.rna.immgen.z.BT[BT.cluster.list[[i]],]),
+                     Cluster = paste0("cluster", i),
+                     stringsAsFactors = FALSE)
+   rownames(out) <- out$Clusters
+   return(out)
+}) %>%
+do.call(rbind, .)
+BT.clusters$symbol <-mapIds(org.Mm.eg.db, keys=BT.clusters$entrezID, column="SYMBOL", keytype="ENTREZID")
+
+#Gene lists
+T.genes <- BT.clusters[BT.clusters$Cluster=="cluster2",]
+write.table(T.genes[,3], "output/data/data_3/genelists/Tcell_genes.txt", quote = F, sep = "\t", row.names = F, col.names = F)
+B.genes <- BT.clusters[BT.clusters$Cluster=="cluster3",]
+write.table(B.genes[,3], "output/data/data_3/genelists/Bcell_genes.txt", quote = F, sep = "\t", row.names = F, col.names = F)
+
+```
+
+
+
+## 3.2 Identification of B/T putative enhancers map
+
+### 3.2.1 Define consensus peak set for element identification
+Merged IDR set of 230238/P2C2 used
+```{bash engine.opts='-l'}
+cd output/data/data_3/peaks/ 
+bash /mnt/data/common/tobias/tg/LIANA/liana_2401/script/general/peak_union.sh /mnt/data/common/tobias/tg/atacseq/reananlysis/230238/240221_enconde_pipeline_analysis/peaks/230238_atac.idr.optimal_peak.narrowPeak /mnt/data/common/tobias/tg/atacseq/reananlysis/p2c2/240221_enconde_pipeline_analysis/peaks/p2c2_atac_idr.optimal_peak.narrowPeak 230238 P2C2 atac_230238_p2c2_idr_consensus_info.bed
+awk -v FS='\t' -v OFS='\t' '{print $1, $2, $3, $1":"$2"-"$3}' atac_230238_p2c2_idr_consensus_info.bed > atac_230238_p2c2_idr_consensus.bed
+```
+
+
+### 3.2.2 Annotation
+LIANA annotation using 230238/P2C2 plac-seq data
+```{bash engine.opts='-l'}
+script_dir="script/analysis_3"
+bash $script_dir/liana_230238_p2c2_atac_consensus_annotation.sh
+```
+
+HOMER proximity annotation 
+```{bash engine.opts='-l'}
+cd output/data/data_3/annotation
+annotatePeaks.pl ../peaks/atac_230238_p2c2_idr_consensus.bed mm10 > atac_230238_p2c2_consensus_peaks_homer_annotation.txt
+awk -v FS='\t' -v OFS='\t' '{print $1, $16, $10}' atac_230238_p2c2_consensus_peaks_homer_annotation.txt > atac_230238_p2c2_consensus_peaks_homer_annotation_cut.txt
+```
+
+GREAT annotation
+Great run at default settings except upper distance limit set to 3Mb (to match PLAC-seq limit)
+
+
+Merge and organize annotation output
+```{r}
+dist <- 7500
+
+#Homer
+BT_elements_anno_homer <- read.table("output/data/data_3/annotation/atac_230238_p2c2_consensus_peaks_homer_annotation_cut.txt", header=TRUE, sep="\t")
+colnames(BT_elements_anno_homer) <- c("peakID", "Gene","Distance_to_TSS")
+BT_elements_anno_homer$Type <- ifelse(abs(BT_elements_anno_homer$Distance_to_TSS) <= dist, "Proximal", "Distal")
+BT_elements_anno_homer <- BT_elements_anno_homer[!duplicated(BT_elements_anno_homer),]
+
+#GREAT
+BT_elements_anno_great <- read.table("output/data/data_3/annotation/atac_230238_p2c2_consensus_peaks_great_annotation_3Mb.txt", header=F, sep="\t")
+colnames(BT_elements_anno_great) <- c("peakID", "Gene")
+BT_elements_anno_great <- mutate(BT_elements_anno_great,Gene = strsplit(Gene, ", ")) %>% unnest(Gene) %>% separate(Gene, c('Gene', 'Distance_to_TSS'), sep=" \\(")
+BT_elements_anno_great$Distance_to_TSS <- str_replace(BT_elements_anno_great$Distance_to_TSS,
+                        pattern = "\\)",
+                        replacement = "")
+BT_elements_anno_great$Distance_to_TSS <- as.numeric(BT_elements_anno_great$Distance_to_TSS)
+BT_elements_anno_great$Type <- ifelse(abs(BT_elements_anno_great$Distance_to_TSS) <= dist, "Proximal", "Distal")
+BT_elements_anno_great <- BT_elements_anno_great[!duplicated(BT_elements_anno_great),]
+
+#LIANA - 230238
+BT_elements_anno_liana230238 <- read.table("output/data/data_3/annotation/atac_230238_p2c2_consensus_peaks_230238_H3K4me3_PLAC_annotation/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+BT_elements_anno_liana230238$peakID <- paste0(BT_elements_anno_liana230238$Chr, ":", BT_elements_anno_liana230238$Start, "-", BT_elements_anno_liana230238$End)
+BT_elements_anno_liana230238 <- BT_elements_anno_liana230238[!is.na(BT_elements_anno_liana230238$Distance_to_TSS),]
+BT_elements_anno_liana230238$Type <- ifelse(abs(BT_elements_anno_liana230238$Distance_to_TSS) <= dist, "Proximal", "Distal")
+BT_elements_anno_liana230238 <- BT_elements_anno_liana230238[,c(17,9,5,18)]
+BT_elements_anno_liana230238 <- BT_elements_anno_liana230238[!duplicated(BT_elements_anno_liana230238),]
+
+#LIANA - P2C2
+BT_elements_anno_lianaP2C2 <- read.table("output/data/data_3/annotation/atac_230238_p2c2_consensus_peaks_P2C2_H3K4me3_PLAC_annotation/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+BT_elements_anno_lianaP2C2$peakID <- paste0(BT_elements_anno_lianaP2C2$Chr, ":", BT_elements_anno_lianaP2C2$Start, "-", BT_elements_anno_lianaP2C2$End)
+BT_elements_anno_lianaP2C2 <- BT_elements_anno_lianaP2C2[!is.na(BT_elements_anno_lianaP2C2$Distance_to_TSS),]
+BT_elements_anno_lianaP2C2$Type <- ifelse(abs(BT_elements_anno_lianaP2C2$Distance_to_TSS) <= dist, "Proximal", "Distal")
+BT_elements_anno_lianaP2C2 <- BT_elements_anno_lianaP2C2[,c(17,9,5,18)]
+BT_elements_anno_lianaP2C2 <- BT_elements_anno_lianaP2C2[!duplicated(BT_elements_anno_lianaP2C2),]
+```
+
+
+### 3.2.3 Identification of putative regualatory element of B/T genes
+```{r}
+#Proximity
+BT.elements.homer <- rbind(data.frame(BT_elements_anno_homer[BT_elements_anno_homer$Gene %in% B.genes$symbol,], group="B"), data.frame(BT_elements_anno_homer[BT_elements_anno_homer$Gene %in% T.genes$symbol,], group="T"))
+
+#GREAT
+BT.elements.great <- rbind(data.frame(BT_elements_anno_great[BT_elements_anno_great$Gene %in% B.genes$symbol,], group="B"), data.frame(BT_elements_anno_great[BT_elements_anno_great$Gene %in% T.genes$symbol,], group="T"))
+
+#LIANA
+BT.elements.liana <- rbind(data.frame(BT_elements_anno_liana230238[BT_elements_anno_liana230238$Gene %in% B.genes$symbol,], group="B"), data.frame(BT_elements_anno_lianaP2C2[BT_elements_anno_lianaP2C2$Gene %in% T.genes$symbol,], group="T"))
+save(BT.elements.liana, file="output/data/data_3/rdata/BT_elements_liana.Rdata")
+
+
+#Merge
+BT.elements.merge <- rbind(data.frame(BT.elements.homer, anno="PROXIMITY"), data.frame(BT.elements.great, anno="GREAT"), data.frame(BT.elements.liana, anno="LIANA"))
+
+#Filter if not open
+BT_elements_info <- read.table("output/data/data_3/peaks/atac_230238_p2c2_idr_consensus_info.bed", header=F, sep="\t")
+colnames(BT_elements_info) <- c("chr", "start", "end", "celltype")
+BT_elements_info$peakID <- paste0(BT_elements_info$chr, ":", BT_elements_info$start, "-", BT_elements_info$end)
+
+BT.elements.merge <- BT.elements.merge[!(BT.elements.merge$group=="B" & BT.elements.merge$peakID %in% BT_elements_info[BT_elements_info$celltype=="P2C2",]$peakID) & !(BT.elements.merge$group=="T" & BT.elements.merge$peakID %in% BT_elements_info[BT_elements_info$celltype=="230238",]$peakID),]
+```
+
+
+
+
+## 3.3 Histone status in B/T elements
+
+### 3.3.1 Preprocessing 
+
+```{r}
+#Loading sample info
+samples.cnr.230238.p2c2.histones <- rbind(read.table("data/atac/info/samples_atac_230238_p2c2_atac.txt", header=TRUE, sep="\t", quote = ""),read.table("data/chip_cnr/info/samples_cnr_230238_p2c2_histones.txt", header=TRUE, sep="\t", quote = ""))
+
+#Extracting normalized coutns in GSE201141 atac-seq peaks
+dbo.cnr.230238.p2c2.histones <- dba(sampleSheet=samples.cnr.230238.p2c2.histones)
+counts.cnr.230238.p2c2.histones <- dba.count(dbo.cnr.230238.p2c2.histones, peaks="output/data/data_3/peaks/atac_230238_p2c2_idr_consensus_cut.bed", summits = F)
+save(counts.cnr.230238.p2c2.histones, file="output/data/data_3/rdata/counts.cnr.230238.p2c2.histones_atac_230238_p2c2_consensus_peaks.Rdata")
+load( file="output/data/data_3/rdata/counts.cnr.230238.p2c2.histones_atac_230238_p2c2_consensus_peaks.Rdata")
+
+#Saving raw counts from consensus peak set to data frame
+cnr.230238.p2c2.histones.raw.count <- lapply(counts.cnr.230238.p2c2.histones[["peaks"]],function(x) x[,6])
+cnr.230238.p2c2.histones.raw.count.df<- as.data.frame(cnr.230238.p2c2.histones.raw.count)
+rownames(cnr.230238.p2c2.histones.raw.count.df) <- paste0(counts.cnr.230238.p2c2.histones[["peaks"]][[1]][,1], ":", counts.cnr.230238.p2c2.histones[["peaks"]][[1]][,2], "-", counts.cnr.230238.p2c2.histones[["peaks"]][[1]][,3])
+colnames(cnr.230238.p2c2.histones.raw.count.df) <- counts.cnr.230238.p2c2.histones$SampleID
+
+#Extracting noramlized counts
+counts.cnr.230238.p2c2.histones.norm <- dba.normalize(counts.cnr.230238.p2c2.histones)
+counts.cnr.230238.p2c2.histones.norm <- dba.peakset(counts.cnr.230238.p2c2.histones, bRetrieve=TRUE)
+counts.cnr.230238.p2c2.histones.norm.df <- as.data.frame(counts.cnr.230238.p2c2.histones.norm)
+counts.cnr.230238.p2c2.histones.norm.df$peakID <- paste0(counts.cnr.230238.p2c2.histones.norm.df$seqnames, ":", counts.cnr.230238.p2c2.histones.norm.df$start, "-", counts.cnr.230238.p2c2.histones.norm.df$end)
+counts.cnr.230238.p2c2.histones.norm.df.mean <- data.frame(peakID=counts.cnr.230238.p2c2.histones.norm.df$peakID, ATAC_230238=rowMeans(counts.cnr.230238.p2c2.histones.norm.df[,6:7]), ATAC_p2c2=rowMeans(counts.cnr.230238.p2c2.histones.norm.df[,8:9]),
+H3K4me3_230238=counts.cnr.230238.p2c2.histones.norm.df[,10], H3K27ac_230238=rowMeans(counts.cnr.230238.p2c2.histones.norm.df[,11:13]), H3K27me3_230238=rowMeans(counts.cnr.230238.p2c2.histones.norm.df[,14:15]),
+H3K4me3_p2c2=rowMeans(counts.cnr.230238.p2c2.histones.norm.df[,16:18]), H3K27ac_p2c2=rowMeans(counts.cnr.230238.p2c2.histones.norm.df[,19:21]),
+H3K27me3_p2c2=rowMeans(counts.cnr.230238.p2c2.histones.norm.df[,22:24]))
+write.table(counts.cnr.230238.p2c2.histones.norm.df.mean, "output/data/data_3/rdata/atac_230238_p2c2_consensus_peaks_cnr_histone_count.txt", quote = F, sep = "\t", row.names = F, col.names = T)
+
+#Convert to long format
+counts.cnr.230238.p2c2.histones.norm.df.mean.long <- rbind(data.frame(peakID=counts.cnr.230238.p2c2.histones.norm.df.mean$peakID, ATAC=counts.cnr.230238.p2c2.histones.norm.df.mean$ATAC_230238, H3K4me3=counts.cnr.230238.p2c2.histones.norm.df.mean$H3K4me3_230238, H3K27ac=counts.cnr.230238.p2c2.histones.norm.df.mean$H3K27ac_230238, H3K27me3=counts.cnr.230238.p2c2.histones.norm.df.mean$H3K27me3_230238, celltype="230238"),data.frame(peakID=counts.cnr.230238.p2c2.histones.norm.df.mean$peakID, ATAC=counts.cnr.230238.p2c2.histones.norm.df.mean$ATAC_p2c2, H3K4me3=counts.cnr.230238.p2c2.histones.norm.df.mean$H3K4me3_p2c2, H3K27ac=counts.cnr.230238.p2c2.histones.norm.df.mean$H3K27ac_p2c2, H3K27me3=counts.cnr.230238.p2c2.histones.norm.df.mean$H3K27me3_p2c2, celltype="P2C2"))
+```
+
+### 3.3.2 Extract CnR/ATAC levels in B/T elements
+```{r}
+BT.elements.merge.histones <- merge(BT.elements.merge, counts.cnr.230238.p2c2.histones.norm.df.mean.long)
+BT.elements.merge.histones$anno <- factor(BT.elements.merge.histones$anno, levels=c("PROXIMITY", "GREAT", "LIANA"))
+
+#liana only
+BT.elements.merge.histones.liana <- BT.elements.merge.histones[BT.elements.merge.histones$anno=="LIANA",]
+#FIlter for min count of 10 H3K2ac in B/T elements (230238/p2c2 respectivy
+BT.elements.merge.histones.liana.filt <- BT.elements.merge.histones.liana
+BT.elements.merge.histones.liana.filt$id <- paste0(BT.elements.merge.histones.liana$peakID, "_", BT.elements.merge.histones.liana$Gene)
+
+BT.elements.merge.histones.liana.filt <- BT.elements.merge.histones.liana.filt[(BT.elements.merge.histones.liana.filt$id %in% BT.elements.merge.histones.liana.filt[BT.elements.merge.histones.liana.filt$group=="B" & BT.elements.merge.histones.liana.filt$celltype=="230238" & BT.elements.merge.histones.liana.filt$H3K27ac>=10,]$id) | (BT.elements.merge.histones.liana.filt$id %in% BT.elements.merge.histones.liana.filt[BT.elements.merge.histones.liana.filt$group=="T" & BT.elements.merge.histones.liana.filt$celltype=="P2C2" & BT.elements.merge.histones.liana.filt$H3K27ac>=10,]$id),]
+```
+
+liana only (all interactions kept)
+```{r}
+BT.elements.liana.all <- rbind(data.frame(BT_elements_anno_liana230238, int="230238"), data.frame(BT_elements_anno_lianaP2C2, int="P2C2"))
+BT.elements.liana.all$group <- ifelse(BT.elements.liana.all$Gene%in% B.genes$symbol, "B", ifelse(BT.elements.liana.all$Gene%in% T.genes$symbol, "T", NA))
+BT.elements.liana.all <- BT.elements.liana.all[!is.na(BT.elements.liana.all$group),]
+
+#filter atac
+BT.elements.liana.all <- BT.elements.liana.all[!(BT.elements.liana.all$group=="B" & BT.elements.liana.all$peakID %in% BT_elements_info[BT_elements_info$celltype=="P2C2",]$peakID) & !(BT.elements.liana.all$group=="T" & BT.elements.liana.all$peakID %in% BT_elements_info[BT_elements_info$celltype=="230238",]$peakID),]
+
+#merge (and filter) histones
+BT.elements.liana.all.histones <- merge(BT.elements.liana.all, counts.cnr.230238.p2c2.histones.norm.df.mean.long)
+
+BT.elements.liana.all.histones$id <- paste0(BT.elements.liana.all.histones$peakID, "_", BT.elements.liana.all.histones$Gene)
+
+BT.elements.liana.all.histones.filt <- BT.elements.liana.all.histones[(BT.elements.liana.all.histones$id %in% BT.elements.liana.all.histones[BT.elements.liana.all.histones$group=="B" & BT.elements.liana.all.histones$celltype=="230238" & BT.elements.liana.all.histones$H3K27ac>=10,]$id) | (BT.elements.liana.all.histones$id %in% BT.elements.liana.all.histones[BT.elements.liana.all.histones$group=="T" & BT.elements.liana.all.histones$celltype=="P2C2" & BT.elements.liana.all.histones$H3K27ac>=10,]$id),]
+```
+
+
+
+### 3.3.3 Violin plot of histone levels
+```{r}
+#Histone levels: LIANA annotation
+my_comparisons <- list( c("230238", "P2C2"))
+
+ggplot(BT.elements.merge.histones[BT.elements.merge.histones$anno=="LIANA",], aes(celltype,log2(ATAC+1), fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","grey"), 6)))+
+    facet_grid(Type  ~ group)+
+  ylim(0,12)+
+  stat_compare_means(comparisons = my_comparisons, label.y = c(10.5), label="p.signif")
+
+ggplot(BT.elements.merge.histones[BT.elements.merge.histones$anno=="LIANA",], aes(celltype,log2(H3K4me3+1), fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","darkolivegreen3"), 6)))+
+    facet_grid(Type  ~ group)+
+  ylim(0,11)+
+  stat_compare_means(comparisons = my_comparisons, label.y = c(9.5), label="p.signif")
+
+ggplot(BT.elements.merge.histones[BT.elements.merge.histones$anno=="LIANA",], aes(celltype,log2(H3K27ac+1), fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","cadetblue3"), 6)))+
+    facet_grid(Type  ~ group)+
+  ylim(0,9)+
+  stat_compare_means(comparisons = my_comparisons, label.y = c(7.5), label="p.signif")
+
+ggplot(BT.elements.merge.histones[BT.elements.merge.histones$anno=="LIANA",], aes(celltype,log2(H3K27me3+1), fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","darkorange2"), 6)))+
+    facet_grid(Type  ~ group)+
+  ylim(0,7)+
+  stat_compare_means(comparisons = my_comparisons, label.y = c(5.5), label="p.signif")
+
+
+
+#new
+#Histone levels: LIANA annotation
+my_comparisons <- list( c("230238", "P2C2"))
+
+ggplot(BT.elements.liana.all.histones[BT.elements.liana.all.histones$Type=="Distal",], aes(celltype,log2(ATAC+1), fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","grey"), 6)))+
+    facet_grid(group  ~ int)+
+  ylim(0,12)+
+  stat_compare_means(comparisons = my_comparisons, label.y = c(10.5), label="p.signif")
+```
+
+### 3.4.1 Comaprison of histone status with differnt annotation methods
+```{r}
+#Comparison of annotation methods: Distal elements H3K27ac
+#my_comparisons <- list( c("PROXIMITY", "GREAT"), c("GREAT", "LIANA"), c("PROXIMITY", "LIANA") )
+my_comparisons <- list( c("GREAT", "LIANA"))
+BT_element_atac_compare <- ggplot(BT.elements.merge.histones[BT.elements.merge.histones$Type=="Distal" & BT.elements.merge.histones$anno !="PROXIMITY",], aes(anno,log2(ATAC+1), fill=anno))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","grey"), 6)))+
+    facet_grid(group  ~ celltype)+
+  ylim(0,12)+
+    #tat_compare_means(comparisons = my_comparisons, label.y = c(10.5))
+  stat_compare_means(comparisons = my_comparisons, label.y = c(10.5), label="p.signif")
+ggsave(path="output/plots/plots_3", filename="BT_element_atac_compare.pdf", plot = BT_element_atac_compare, device = "pdf", dpi=300,width = 6, height = 4)
+
+BT_element_h3k27ac_compare <- ggplot(BT.elements.merge.histones[BT.elements.merge.histones$Type=="Distal" & BT.elements.merge.histones$anno !="PROXIMITY",], aes(anno,log2(H3K27ac+1), fill=anno))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","#A90804"), 6)))+
+    facet_grid(group  ~ celltype)+
+  ylim(0,11)+
+    #stat_compare_means(comparisons = my_comparisons, label.y = c(8,8,9.5))
+  stat_compare_means(comparisons = my_comparisons, label.y = c(8,8,9.5), label="p.signif")
+ggsave(path="output/plots/plots_3", filename="BT_element_h3k27ac_compare.pdf", plot = BT_element_h3k27ac_compare, device = "pdf", dpi=300, width = 6, height = 4)
+
+```
+
+
+## 3.5 Investigation of B/T elements
+
+### 3.5.1 Extract B/T enhancer map
+Distal elements >2.5kb from TSS, annotated to B genes (230238 PLACseq) or T genes (P2C2 PLACseq)
+```{r}
+#not histone filtered
+B.enh <- BT.elements.merge.histones[BT.elements.merge.histones$Type=="Distal" & BT.elements.merge.histones$group=="B" & BT.elements.merge.histones$anno=="LIANA" & BT.elements.merge.histones$celltype=="230238",]
+B.enh.bed <- B.enh %>% separate(peakID, c("chr", "start", "end"), ":|-")
+write.table(B.enh.bed[,1:3], "output/data/data_3/peaks/B_enhancers.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+
+T.enh <- BT.elements.merge.histones[BT.elements.merge.histones$Type=="Distal" & BT.elements.merge.histones$group=="T" & BT.elements.merge.histones$anno=="LIANA" & BT.elements.merge.histones$celltype=="P2C2",]
+T.enh.bed <- T.enh %>% separate(peakID, c("chr", "start", "end"), ":|-")
+write.table(T.enh.bed[,1:3], "output/data/data_3/peaks/T_enhancers.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+
+#hsitone filtered
+B.enh.filt <- BT.elements.merge.histones[BT.elements.merge.histones$Type=="Distal" & BT.elements.merge.histones$group=="B" & BT.elements.merge.histones$anno=="LIANA" & BT.elements.merge.histones$celltype=="230238",]
+B.enh.filt.bed <- B.enh.filt %>% separate(peakID, c("chr", "start", "end"), ":|-")
+write.table(B.enh.filt.bed[,1:3], "output/data/data_3/peaks/B_enhancers.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+
+T.enh.filt <- BT.elements.merge.histones[BT.elements.merge.histones$Type=="Distal" & BT.elements.merge.histones$group=="T" & BT.elements.merge.histones$anno=="LIANA" & BT.elements.merge.histones$celltype=="P2C2",]
+T.enh.filt.bed <- T.enh.filt %>% separate(peakID, c("chr", "start", "end"), ":|-")
+write.table(T.enh.filt.bed[,1:3], "output/data/data_3/peaks/T_enhancers.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+
+### 3.5.2 Motif enrichemnt in B/T elements
+Use 3
+HOMER
+```{bash engine.opts='-l'}
+cd output/data/data_3/motifs
+
+findMotifsGenome.pl ../peaks/B_enhancers.bed mm10 B_enahncers_motifs_out -size 200 -mask
+
+findMotifsGenome.pl ../peaks/T_enhancers.bed mm10 T_enahncers_motifs_out -size 200 -mask
+
+```
+
+GIMME maelstrom
+```{r}
+#old
+BT.elements.liana.gimme <- BT.elements.liana[,c(1,4,5)]
+
+#new
+BT.elements.liana.gimme <- BT.elements.merge.histones.liana.filt[,c(1,4,5)]
+
+BT.elements.liana.gimme$cluster <- paste0(BT.elements.liana.gimme$group, "_", BT.elements.liana.gimme$Type)
+BT.elements.liana.gimme <- BT.elements.liana.gimme[!duplicated(BT.elements.liana.gimme),]
+#BT.elements.liana.gimme <- BT.elements.liana.gimme[!(BT.elements.liana.gimme$group=="B" & BT.elements.liana.gimme$peakID %in% BT_elements_info[BT_elements_info$celltype=="P2C2",]$peakID) & !(BT.elements.liana.gimme$group=="T" & BT.elements.liana.gimme$peakID %in% BT_elements_info[BT_elements_info$celltype=="230238",]$peakID),]
+
+
+write.table(BT.elements.liana.gimme[,c(1,4)], file="output/data/data_3/motifs/BT_elements_for_gimme.txt", quote=FALSE, sep="\t", col.names=T, row.names=FALSE)
+
+```
+
+Run in command line 
+```{bash engine.opts='-l'}
+cd output/data/data_3/motifs
+
+conda activate gimme
+
+gimme maelstrom BT_elements_for_gimme.txt mm10 BT_elements_gimme_maelstrom_out
+
+```
+
+## 3.5 Investigation of TF biding
+
+### 3.5.1 LIANA multiple mode
+```{bash engine.opts='-l'}
+script_dir="script/analysis_3"
+bash $script_dir/liana_multiple_tf_occupancy.sh
+
+```
+Percent binding
+```{r}
+#Calcualte % biding for each factor of total regions annoteted to selected genelist
+
+#B
+upset_b <- read.table("output/data/data_3/tf_occupancy/tf_occupancy_Bgenes_230238_H3K4me3_PLAC_annotation/tmp/process10/UpSet_PLACseq_interactions_Distal_genes.txt", header=T, sep="\t")
+length(unique(upset_b[upset_b$Source=="EBF1",]$Target))/length(unique(upset_b$Target))
+length(unique(upset_b[upset_b$Source=="PAX5",]$Target))/length(unique(upset_b$Target))
+length(unique(upset_b[upset_b$Source=="TCF7",]$Target))/length(unique(upset_b$Target))
+length(unique(upset_b[upset_b$Source=="GATA3",]$Target))/length(unique(upset_b$Target))
+
+#T
+upset_t <- read.table("output/data/data_3/tf_occupancy/tf_occupancy_Tgenes_P2C2_H3K4me3_PLAC_annotation/tmp/process10/UpSet_PLACseq_interactions_Distal_genes.txt", header=T, sep="\t")
+length(unique(upset_t[upset_t$Source=="EBF1",]$Target))/length(unique(upset_t$Target))
+length(unique(upset_t[upset_t$Source=="PAX5",]$Target))/length(unique(upset_t$Target))
+length(unique(upset_t[upset_t$Source=="TCF7",]$Target))/length(unique(upset_t$Target))
+length(unique(upset_t[upset_t$Source=="GATA3",]$Target))/length(unique(upset_t$Target))
+
+
+
+```
+
+### 3.5.2 Heatmap of TF bound elements with Immgen RNA-seq
+
+
+Ebf1
+
+```{r}
+BT_elements_anno_liana230238_Ebf1 <- read.table("output/data/data_3/tf_occupancy/tf_occupancy_Bgenes_230238_H3K4me3_PLAC_annotation/Peak_annotation/EBF1/EBF1_PLACseq_annotated.txt", header=TRUE, sep="\t")
+
+ebf1 <- BT_elements_anno_liana230238_Ebf1
+vst.rna.immgen.z.Ebf1 <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% ebf1$EntrezID, ]
+
+col <- colorRamp2(c(-4,  0,   4),c( "#1f426a",  "white","#94302f"))
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
+
+Ebf1.heatmap<- Heatmap(vst.rna.immgen.z.Ebf1, col=col,name="BT", row_km = 7, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = c("#58595b", "#1f426a", "#6b2456"))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar( fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar( fontsize=8, fontface="bold"), labels_gp=gpar(fontsize=6)), row_title_gp = gpar( fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Ebf1.heatmap <-draw(Ebf1.heatmap, main_heatmap = "BT", heatmap_width = unit(8, "cm"), heatmap_height = unit(12, "cm")) 
+
+cairo_pdf("output/plots/plots_4/Ebf1_heatmap.pdf", width = 3.6, height=6)
+Ebf1.heatmap
+dev.off()
+
+```
+
+
+
+
+
+```{r}
+BT_elements_anno_liana230238_Ebf1 <- read.table("output/data/data_3/tf_occupancy/tf_occupancy_Bgenes_230238_H3K4me3_PLAC_annotation/Peak_annotation/EBF1/EBF1_PLACseq_annotated.txt", header=TRUE, sep="\t")
+
+#Promoter
+ebf1.promoter <- BT_elements_anno_liana230238_Ebf1[BT_elements_anno_liana230238_Ebf1$Annotation_method=="Proximal_anno" & BT_elements_anno_liana230238_Ebf1$Peak_type=="Promoter",]
+vst.rna.immgen.z2 <- as.data.frame(vst.rna.immgen.mean/rowMeans(vst.rna.immgen.mean))
+
+vst.rna.immgen.z.Ebf1.p <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% ebf1.promoter$EntrezID, ]
+
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
+Ebf1.heatmap.p <- Heatmap(vst.rna.immgen.z.Ebf1.p, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontfamily="LM Roman 10", fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), labels_gp=gpar(fontfamily="LM Roman 10", fontsize=6)), row_title_gp = gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Ebf1.heatmap.p <-draw(Ebf1.heatmap.p, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+
+#Distal
+ebf1.distal <- BT_elements_anno_liana230238_Ebf1[BT_elements_anno_liana230238_Ebf1$Annotation_method=="Interaction_anno" & BT_elements_anno_liana230238_Ebf1$Peak_type=="Distal",]
+vst.rna.immgen.z.Ebf1.d <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% ebf1.distal$EntrezID, ]
+#vst.rna.immgen.Ebf1.d <- vst.rna.immgen.mean[rownames(vst.rna.immgen.mean) %in% ebf1.distal$EntrezID, ]
+
+#col <- colorRamp2(c(-4, -2,0, 2, 4),mako(5))
+col <- colorRamp2(c(-3.5,  0,   3.5),c("red",  "white", "blue"))
+
+Ebf1.heatmap.d <- Heatmap(vst.rna.immgen.z.Ebf1.d, col=col,name="BT", row_km = 6, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar( fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar( fontsize=8, fontface="bold"), labels_gp=gpar(fontsize=6)), row_title_gp = gpar( fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Ebf1.heatmap.d <-draw(Ebf1.heatmap.d, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+
+#Both
+
+
+
+#all
+load(file="output/data/data_1/rdata/Immgen_rna.Rdata")
+immgen.rna.z <- log2(immgen.rna)
+immgen.rna.z <- as.data.frame(immgen.rna.z-rowMeans(immgen.rna.z))/rowSds(as.matrix(immgen.rna.z))
+immgen.rna.z <- na.omit(immgen.rna.z)
+immgen.rna.z.ebf <- immgen.rna.z[rownames(immgen.rna.z) %in% ebf1.distal$Gene, ]
+
+immgen.rna.z.ebf <- immgen.rna.z.ebf[,c("LTHSC.34..BM", "LTHSC.34..BM.1", "STHSC.150..BM", "MPP3.48..BM", "MPP4.135..BM", colnames(immgen.rna.z.ebf[,5:63]), colnames(immgen.rna.z.ebf[,78:80]),colnames(immgen.rna.z.ebf[,70:77]), colnames(immgen.rna.z.ebf[,68:69]), colnames(immgen.rna.z.ebf[,65:67]))]
+groups = c(rep("Stem cells", 5), rep("B cells",18), rep( "ab T cells",24), rep( "gd T cells",7), rep( "Innate Lymphocytes",10), rep( "Dendritic cells",3), rep( "Macrophages",8), rep( "Monocytes",2), rep( "Granulocytes",3))
+groups <- factor(groups, levels = c( "Monocytes", "Macrophages", "Granulocytes", "Dendritic cells", "Innate Lymphocytes","ab T cells", "gd T cells", "B cells","Stem cells"))
+
+#Plotting heatmap
+library(ComplexHeatmap)
+col <- colorRamp2(c(-4, -2, 0, 2, 4),mako(5))
+col <- colorRamp2(c(-4,  -1, 0, 1,  4),c("red", "white", "white", "white", "blue"))
+col <- colorRamp2(c(-4,  0,   4),c("#94302f",  "white", "#1f426a"))
+source("script/functions/TG_theme.R")
+set.seed(12)
+test <- Heatmap(immgen.rna.z.ebf, col=col,name = "Imm.atac_HLF",  show_row_names=F, cluster_columns = T, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = c("#58595b", "#1f426a", "#6b2456"))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar( fontsize=6),
+        heatmap_legend_param = list(title="z-score",title_gp=gpar( fontsize=8, fontface="bold"), labels_gp=gpar(fontsize=6)), row_title_gp = gpar(fontsize=8, fontface="bold"), use_raster = F)
+test <- draw(test, heatmap_width = unit(12, "cm"), heatmap_height = unit(10, "cm"))
+
+```
+
+
+Pax5
+```{r}
+BT_elements_anno_liana230238_Pax5 <- read.table("output/data/data_3/tf_occupancy/tf_occupancy_Bgenes_230238_H3K4me3_PLAC_annotation/Peak_annotation/PAX5/PAX5_PLACseq_annotated.txt", header=TRUE, sep="\t")
+
+#Promoter
+Pax5.promoter <- BT_elements_anno_liana230238_Pax5[BT_elements_anno_liana230238_Pax5$Annotation_method=="Proximal_anno" & BT_elements_anno_liana230238_Pax5$Peak_type=="Promoter",]
+vst.rna.immgen.z.Pax5.p <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% Pax5.promoter$EntrezID, ]
+
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
+Pax5.heatmap.p <- Heatmap(vst.rna.immgen.z.Pax5.p, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontfamily="LM Roman 10", fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), labels_gp=gpar(fontfamily="LM Roman 10", fontsize=6)), row_title_gp = gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Pax5.heatmap.p <-draw(Pax5.heatmap.p, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+
+#Distal
+Pax5.distal <- BT_elements_anno_liana230238_Pax5[BT_elements_anno_liana230238_Pax5$Annotation_method=="Interaction_anno" & BT_elements_anno_liana230238_Pax5$Peak_type=="Distal",]
+vst.rna.immgen.z.Pax5.d <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% Pax5.distal$EntrezID, ]
+
+Pax5.heatmap.d <- Heatmap(vst.rna.immgen.z.Pax5.d, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontfamily="LM Roman 10", fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), labels_gp=gpar(fontfamily="LM Roman 10", fontsize=6)), row_title_gp = gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Pax5.heatmap.d <-draw(Pax5.heatmap.d, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+```
+
+Tcf7
+```{r}
+BT_elements_anno_lianaP2C2_Tcf7 <- read.table("output/data/data_3/tf_occupancy/tf_occupancy_Tgenes_P2C2_H3K4me3_PLAC_annotation/Peak_annotation/TCF7/TCF7_PLACseq_annotated.txt", header=TRUE, sep="\t")
+
+#Promoter
+Tcf7.promoter <- BT_elements_anno_lianaP2C2_Tcf7[BT_elements_anno_lianaP2C2_Tcf7$Annotation_method=="Proximal_anno" & BT_elements_anno_lianaP2C2_Tcf7$Peak_type=="Promoter",]
+vst.rna.immgen.z.Tcf7.p <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% Tcf7.promoter$EntrezID, ]
+
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
+Tcf7.heatmap.p <- Heatmap(vst.rna.immgen.z.Tcf7.p, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontfamily="LM Roman 10", fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), labels_gp=gpar(fontfamily="LM Roman 10", fontsize=6)), row_title_gp = gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Tcf7.heatmap.p <-draw(Tcf7.heatmap.p, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+
+#Distal
+Tcf7.distal <- BT_elements_anno_lianaP2C2_Tcf7[BT_elements_anno_lianaP2C2_Tcf7$Annotation_method=="Interaction_anno" & BT_elements_anno_lianaP2C2_Tcf7$Peak_type=="Distal",]
+vst.rna.immgen.z.Tcf7.d <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% Tcf7.distal$EntrezID, ]
+
+Tcf7.heatmap.d <- Heatmap(vst.rna.immgen.z.Tcf7.d, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontfamily="LM Roman 10", fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), labels_gp=gpar(fontfamily="LM Roman 10", fontsize=6)), row_title_gp = gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Tcf7.heatmap.d <-draw(Tcf7.heatmap.d, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+```
+
+
+Gata3
+```{r}
+BT_elements_anno_lianaP2C2_Gata3 <- read.table("output/data/data_3/tf_occupancy/tf_occupancy_Tgenes_P2C2_H3K4me3_PLAC_annotation/Peak_annotation/GATA3/GATA3_PLACseq_annotated.txt", header=TRUE, sep="\t")
+
+#Promoter
+Gata3.promoter <- BT_elements_anno_lianaP2C2_Gata3[BT_elements_anno_lianaP2C2_Gata3$Annotation_method=="Proximal_anno" & BT_elements_anno_lianaP2C2_Gata3$Peak_type=="Promoter",]
+vst.rna.immgen.z.Gata3.p <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% Gata3.promoter$EntrezID, ]
+
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
+Gata3.heatmap.p <- Heatmap(vst.rna.immgen.z.Gata3.p, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontfamily="LM Roman 10", fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), labels_gp=gpar(fontfamily="LM Roman 10", fontsize=6)), row_title_gp = gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Gata3.heatmap.p <-draw(Gata3.heatmap.p, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+
+#Distal
+Gata3.distal <- BT_elements_anno_lianaP2C2_Gata3[BT_elements_anno_lianaP2C2_Gata3$Annotation_method=="Interaction_anno" & BT_elements_anno_lianaP2C2_Gata3$Peak_type=="Distal",]
+vst.rna.immgen.z.Gata3.d <- vst.rna.immgen.z[rownames(vst.rna.immgen.m) %in% Gata3.distal$EntrezID, ]
+
+Gata3.heatmap.d <- Heatmap(vst.rna.immgen.z.Gata3.d, name="BT", row_km = 4, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = turbo(3, begin=0.1, end=0.9))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar(fontfamily="LM Roman 10", fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), labels_gp=gpar(fontfamily="LM Roman 10", fontsize=6)), row_title_gp = gpar(fontfamily="LM Roman 10", fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Gata3.heatmap.d <-draw(Gata3.heatmap.d, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
+```
+
+
+
+
+
