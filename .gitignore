@@ -4,7 +4,7 @@
 
 /output/**
 !/output/**/
-!/output/data/plots/
+!/output/plots/
 
 #Exclude tmp directory
 /tmp
