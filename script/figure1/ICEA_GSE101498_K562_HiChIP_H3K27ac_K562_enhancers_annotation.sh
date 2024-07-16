@@ -8,6 +8,6 @@ bed2D=$proj_dir/data/interactions/GSE101498_K562_HiChIP_H3K27ac_FitHiChIP_v_9_1.
 outdir="K562_enhancers_HiChIP_H3K27ac_annotation"
 
 cd $run_dir
-echo nextflow run $icea_path --peaks $peaks --bed2D $bed2D --genome hg19 --outdir $outdir --close_peak_type distance --close_peak_distance 7500 --close_promoter_type distance --close_promoter_distance_start 7500 --close_promoter_distance_end 7500 --filter_close sum --multiple_anno keep --proximity_unannotated -ansi-log false
-nextflow run $icea_path --peaks $peaks --bed2D $bed2D --genome hg19 --outdir $outdir --close_peak_type distance --close_peak_distance 7500 --close_promoter_type distance --close_promoter_distance_start 7500 --close_promoter_distance_end 7500 --filter_close sum --multiple_anno keep --proximity_unannotated -ansi-log false
+echo nextflow run $icea_path --peaks $peaks --bed2D $bed2D --genome hg19 --outdir $outdir --close_peak_type distance --close_peak_distance 5000 --close_promoter_type distance --close_promoter_distance_start 5000 --close_promoter_distance_end 5000 --filter_close sum --multiple_anno keep --proximity_unannotated -ansi-log false
+nextflow run $icea_path --peaks $peaks --bed2D $bed2D --genome hg19 --outdir $outdir --close_peak_type distance --close_peak_distance 5000 --close_promoter_type distance --close_promoter_distance_start 5000 --close_promoter_distance_end 5000 --filter_close sum --multiple_anno keep --proximity_unannotated -ansi-log false
 

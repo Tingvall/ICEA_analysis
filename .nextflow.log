@@ -1,0 +1,6 @@
+Jul-11 10:21:58.488 [main] DEBUG nextflow.cli.Launcher - $> nextflow run --peaks /mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/output/data/figure2/annotation/atac_230238_p2c2_consensus_peak_info.txt --bed2D /mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/data/plac/P2C2_H3K4me3_FitHiChIP.interactions_FitHiC_Q0.05_MergeNearContacts.bed --genome mm10 --outdir atac_230238_p2c2_consensus_peaks_P2C2_H3K4me3_PLAC_annotation --close_peak_type distance --close_peak_distance 5000 --close_promoter_type distance --close_promoter_distance_start 5000 --close_promoter_distance_end 5000 --filter_close sum --multiple_anno keep --skip_promoter_promoter --annotate_interactions -ansi-log false
+Jul-11 10:21:58.559 [main] DEBUG nextflow.cli.Launcher - Operation aborted
+nextflow.exception.AbortOperationException: No project name was specified
+	at nextflow.cli.CmdRun.run(CmdRun.groovy:246)
+	at nextflow.cli.Launcher.run(Launcher.groovy:475)
+	at nextflow.cli.Launcher.main(Launcher.groovy:657)

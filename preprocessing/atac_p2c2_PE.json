@@ -1,0 +1,29 @@
+{
+    "atac.title" : "240221",
+    "atac.description" : "This is a template input JSON for paired ended sample.",
+
+    "atac.pipeline_type" : "atac",
+    "atac.align_only" : false,
+    "atac.true_rep_only" : false,
+
+    "atac.genome_tsv" : "/mnt/data/bioinfo_tools_and_refs/bioinfo_tools/atac-seq-pipeline/genome_files/mm10/mm10.tsv",
+    "atac.genome_name" : "mm10",
+    "atac.paired_end" : false,
+
+    "atac.fastqs_rep1_R1" : [ "/mnt/data/common/jonas/atacseq/39.Scid.adh.2c2_ATAC_seq_rep1/39.Scid.adh.2c2_ATAC_seq_rep1.fastq.gz" ],
+    "atac.fastqs_rep2_R1" : [ "/mnt/data/common/jonas/atacseq/48.Scid.adh.2c2_ATAC_seq_rep2/48.Scid.adh.2c2_ATAC_seq_rep2.fastq.gz" ],
+
+    "atac.auto_detect_adapter" : true,
+    "atac.multimapping" : 4,
+
+    "atac.mapq_thresh" : 30,
+    "atac.dup_marker" : "picard",
+    "atac.no_dup_removal" : true,
+
+    "atac.enable_idr" : true,
+    "atac.idr_thresh" : 0.05,
+
+    "atac.enable_count_signal_track" : true,
+
+    "atac.filter_chrs" : ["chrM", "MT"]
+}

@@ -3,7 +3,7 @@ title: "ICE-A: Figure 1"
 output: 
   html_notebook
 ---
-# 1. Proximity vs interaction based annotation
+# 1 Proximity vs interaction based annotation
 
 ## 1.0 Preperations
 Run before:
@@ -273,9 +273,9 @@ ggsave(path="output/plots/figure1", filename="Distance_threshold_for_CRE_annotat
 ```
 
 
-# 1.3 Benchmarking using validated enhancers in K562 cells
+## 1.3 Benchmarking using validated enhancers in K562 cells
 
-## 1.3.1 Indetification of experimentally validadted enhancers
+### 1.3.1 Indetification of experimentally validadted enhancers
 Load and filter significant enhancers from Fulco et al. 2019
 ```{r}
 # Load Enhancer.Promoter interaction 
@@ -311,7 +311,7 @@ Enh.Prom.pairs.sign <- Enh.Prom.pairs[Enh.Prom.pairs$Significant==TRUE,]
 ```
 
 
-## 1.3.2 Annotation of OCRs
+### 1.3.2 Annotation of OCRs
 HOMER proximity annotation 
 ```{bash engine.opts='-l'}
 cd output/data/figure1/annotation
@@ -357,7 +357,7 @@ Enh.anno.ICEA <- Enh.anno.ICEA[!duplicated(Enh.anno.ICEA$id),]
 
 
 
-### 2.2.3 Comparison in the ability to indetify enhancers in distance ranges
+### 1.3.3 Comparison in the ability to indetify enhancers in distance ranges
 Calculate percentage of identified enhancers, split into distance ranges
 ```{r}
 Enh.Prom.pairs.sig <- Enh.Prom.pairs[Enh.Prom.pairs$Significant==1,]
@@ -395,7 +395,7 @@ ggsave(path="output/plots/figure1", filename="K562_enhancer_annotation_element_b
 
 ```
 
-## 2.3 Gene level enhancer indetificantion increased with “ICEA”
+### 1.3.4 Gene level enhancer indetificantion increased with “ICEA”
 Calculate  enhancer identification per gene
 ```{r}
 Enh.Prom.pairs.sig.summary.gene.prom <- Enh.Prom.pairs.sig.summary[Enh.Prom.pairs.sig.summary$DistanceBin=="[0, 10000)",] %>% 
@@ -427,7 +427,7 @@ ggsave(path="output/plots/figure1", filename="K562_enhancer_annotation_gene_base
 ```
 
 
-## 2.4 Example of situation where only interaction-based annotation identify elements 
+## 1.3.5 Example of situation where only interaction-based annotation identify elements 
 Browser track of the Gata1 locus
 
 
