@@ -243,9 +243,9 @@ cd output/data/figure2/motifs
 
 source /opt/anaconda3/bin/activate ICE_A_env
 
-findMotifsGenome.pl ../peaks/B_enhancers.bed mm10 B_enahncers_motifs_out -size 200 -mask
+findMotifsGenome.pl ../peaks/B_enhancers.bed mm10 B_enahncers_motifs_out_2 -size 200 -mask
 
-findMotifsGenome.pl ../peaks/T_enhancers.bed mm10 T_enahncers_motifs_out -size 200 -mask
+findMotifsGenome.pl ../peaks/T_enhancers.bed mm10 T_enahncers_motifs_out_2 -size 200 -mask
 
 ```
 
