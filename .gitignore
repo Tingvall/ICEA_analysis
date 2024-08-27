@@ -13,3 +13,6 @@
 /.RData
 /.Rhistory
 /.Rproj.user
+
+#Exclude nextflow logs
+/.nextflow.log*

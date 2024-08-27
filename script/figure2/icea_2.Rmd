@@ -72,6 +72,7 @@ vst.rna.immgen.df <- data.frame(assay(vst.rna.immgen))
 vst.rna.immgen.mean <- data.frame(LTHSC_34neg=rowMeans(vst.rna.immgen.df[,1:2]), LTHSC_34pos=rowMeans(vst.rna.immgen.df[,3:4]), STHSC=rowMeans(vst.rna.immgen.df[,5:6]), MPP4=rowMeans(vst.rna.immgen.df[,7:8]),CLP=rowMeans(vst.rna.immgen.df[,9:10]),FrA=rowMeans(vst.rna.immgen.df[,11:12]), FrBC=rowMeans(vst.rna.immgen.df[,13:14]), FrE=rowMeans(vst.rna.immgen.df[,15:16]), DN1=rowMeans(vst.rna.immgen.df[,17:18]),DN2a=vst.rna.immgen.df[,19], DN2b=rowMeans(vst.rna.immgen.df[,20:21]), DN3=rowMeans(vst.rna.immgen.df[,22:23]))
 vst.rna.immgen.z <- as.data.frame(vst.rna.immgen.mean-rowMeans(vst.rna.immgen.mean))/rowSds(as.matrix(vst.rna.immgen.mean))
 vst.rna.immgen.z <- na.omit(vst.rna.immgen.z)
+save(vst.rna.immgen.z, file="output/rdata/figure2/vst.rna.immgen.z.Rdata")
 vst.rna.immgen.z.BT <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% DE.FrBCvsDN2b.result.diff$row, ]
 
 groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
@@ -236,16 +237,16 @@ write.table(T.enh.bed[,1:3], "output/data/figure2/peaks/T_enhancers.bed", quote 
 
 
 ### 2.4.2 Motif enrichemnt in B/T elements
-Use 3
+
 HOMER
 ```{bash engine.opts='-l'}
 cd output/data/figure2/motifs
 
 source /opt/anaconda3/bin/activate ICE_A_env
 
-findMotifsGenome.pl ../peaks/B_enhancers.bed mm10 B_enahncers_motifs_out_2 -size 200 -mask
+findMotifsGenome.pl ../peaks/B_enhancers.bed mm10 B_enahncers_motifs_out -size 200 -mask
 
-findMotifsGenome.pl ../peaks/T_enhancers.bed mm10 T_enahncers_motifs_out_2 -size 200 -mask
+findMotifsGenome.pl ../peaks/T_enhancers.bed mm10 T_enahncers_motifs_out -size 200 -mask
 
 ```
 
@@ -277,3 +278,22 @@ length(unique(upset_t[upset_t$Source=="PAX5",]$Target))/length(unique(upset_t$Ta
 length(unique(upset_t[upset_t$Source=="TCF7",]$Target))/length(unique(upset_t$Target))
 length(unique(upset_t[upset_t$Source=="GATA3",]$Target))/length(unique(upset_t$Target))
 ```
+## 2.6 Save files for supplementary
+Filter output from TF occupancy analysis to only include regions in consensus peak list and open in celltype + target gene in B/T gene list respectively.
+```{r}
+# B elements (supp table 1C)
+tf_anno_B <- read.table("/mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/output/data/figure2/tf_occupancy/tf_occupancy_Bgenes_230238_H3K4me3_PLAC_annotation/Peak_annotation/ALL/ALL_PLACseq_annotated.txt", header=T, sep="\t")
+tf_anno_B$peakID <- paste0(tf_anno_B$Chr, ":", tf_anno_B$Start, "-", tf_anno_B$End)
+tf_anno_B <- tf_anno_B[tf_anno_B$peakID %in% BT_elements_info[BT_elements_info$celltype!="P2C2",]$peakID,]
+tf_anno_B_filt <- tf_anno_B[tf_anno_B$Gene %in% B.genes$symbol,]
+write.table(tf_anno_B_filt[,c(21,1:20)], "output/data/figure2/annotation/Supp_Table_1C_Bcell_elements_with_B_target_genes.txt", quote = F, sep = "\t", row.names = F, col.names = T)
+
+# T elements (supp table 1D)
+tf_anno_T <- read.table("/mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/output/data/figure2/tf_occupancy/tf_occupancy_Tgenes_P2C2_H3K4me3_PLAC_annotation/Peak_annotation/ALL/ALL_PLACseq_annotated.txt", header=T, sep="\t")
+tf_anno_T$peakID <- paste0(tf_anno_T$Chr, ":", tf_anno_T$Start, "-", tf_anno_T$End)
+tf_anno_T <- tf_anno_T[tf_anno_T$peakID %in% BT_elements_info[BT_elements_info$celltype!="230238",]$peakID,]
+tf_anno_T_filt <- tf_anno_T[tf_anno_T$Gene %in% T.genes$symbol,]
+write.table(tf_anno_T_filt[,c(21,1:20)], "output/data/figure2/annotation/Supp_Table_1D_Tcell_elements_with_T_target_genes.txt", quote = F, sep = "\t", row.names = F, col.names = T)
+
+```
+

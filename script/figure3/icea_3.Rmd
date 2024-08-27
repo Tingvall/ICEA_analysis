@@ -1,0 +1,670 @@
+---
+title: "ICE-A: Figure 3"
+output: 
+  html_notebook
+    #toc: true
+---
+# 3. EBF1 focus
+
+## 3.1 Preperations
+Run before:
+conda activate liana_analysis_env
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/anaconda3/envs/ICEA_analysis_env/lib
+
+Setting working directory
+```{r setup}
+knitr::opts_knit$set(root.dir = normalizePath("../../"))
+```
+
+Loading packages
+```{r}
+packages <- c("readxl","AnnotationDbi","org.Mm.eg.db", "clusterProfiler", "ggplot2", "ggpubr", "circlize", "DESeq2", "DiffBind", "ComplexHeatmap", "BiocParallel")
+lapply(packages, library, character.only = TRUE)
+```
+
+
+## 3.1 Investigation of EBF1 target 
+
+### 3.1.1 LIANA annotation of EBF1 bound regions
+
+EBF1 ChIP-seq peaks from 230238 annotated with 230238 H3K4me3 PLAC-seq data using LIANA
+```{bash engine.opts='-l'}
+script_dir="script/figure3"
+bash $script_dir/icea_Ebf1_230238.sh
+```
+
+Identification of genes bound by EBF1 in promoter and enhancer elements
+```{r}
+# Loading annotated EBF1 peaks
+EBF1.anno <- read.table("output/data/figure3/annotation/EBF1_230238_H3K4me3_PLACseq_annotation/Peak_annotation/EBF1/EBF1_PLACseq_annotated.txt", header=TRUE, sep="\t")
+EBF1.anno$peakID <- paste0(EBF1.anno$Chr, ":", EBF1.anno$Start, "-", EBF1.anno$End)
+EBF1.anno <- EBF1.anno[,c(17,6,9,5,10,13,14)]
+```
+
+
+### 3.1.2 Heatmap of EBF1 bound elements with Immgen RNA-seq
+```{r}
+#Extract EBF1 targets in Immgen VST RNA-seq counts
+load(file="output/rdata/figure2/vst.rna.immgen.z.Rdata")
+vst.rna.immgen.z.Ebf1 <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% EBF1.anno$EntrezID, ]
+
+col <- colorRamp2(c(-4,  0,   4),c( "#1f426a",  "white","#94302f"))
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
+
+set.seed(4)
+Ebf1.heatmap<- Heatmap(vst.rna.immgen.z.Ebf1, col=col,name="BT", row_km = 6, show_row_names=F, cluster_columns = F, column_split=groups, show_row_dend = F, top_annotation = HeatmapAnnotation(Group = anno_block(gp = gpar(fill = c("#58595b", "#1f426a", "#6b2456"))), height = unit(0.2, "cm")), show_parent_dend_line = F, column_title = NULL, column_names_gp = gpar( fontsize=6),heatmap_legend_param = list(title="z-score",title_gp=gpar( fontsize=8, fontface="bold"), labels_gp=gpar(fontsize=6)), row_title_gp = gpar( fontsize=8, fontface="bold"), use_raster = F)
+
+set.seed(4)
+Ebf1.heatmap <-draw(Ebf1.heatmap, main_heatmap = "BT", heatmap_width = unit(8, "cm"), heatmap_height = unit(12, "cm")) 
+
+cairo_pdf("output/plots/figure3/Ebf1_heatmap.pdf", width = 3.6, height=6)
+Ebf1.heatmap
+dev.off()
+```
+
+
+### 3.1.3 Expression levels of EBF1 bound genes in WT/Ebf1-KO B cell progenitors
+
+Preparations of WT/Ebf1-KO RNA-seq data. Only normalized counts available, so log2FC will be used to define Up/Down/Ubiquitous genes for now (significance testing require reanalysis for raw counts).
+```{r}
+#Load and organize normalized RNAseq counts
+rna.norm.WT.EKO <- read.table("data/rna/GSE92434_Analyze-repeats-FL-ProB-WT-EKO-PKO-mm10-count-exons-Condense-genes-with-adjust.txt", header = T, sep = "\t", quote = "", fill = T)
+rna.norm.WT.EKO <- rna.norm.WT.EKO[,c(1,9:14)]
+colnames(rna.norm.WT.EKO) <- c("refseq", "WT_1", "WT_2", "WT_3", "EKO_1", "EKO_2", "EKO_3")
+rna.norm.WT.EKO$entrezID <- mapIds(org.Mm.eg.db, keys=rna.norm.WT.EKO$refseq, column="ENTREZID", keytype="REFSEQ")
+rna.norm.WT.EKO$symbol <- mapIds(org.Mm.eg.db, keys=rna.norm.WT.EKO$refseq, column="SYMBOL", keytype="REFSEQ")
+
+rna.norm.WT.EKO <- rna.norm.WT.EKO[!is.na(rna.norm.WT.EKO$entrezID),]
+rna.norm.WT.EKO <- rna.norm.WT.EKO[,c(1,8,9,2:7)]
+
+#Calculate mean and log2FC
+rna.norm.WT.EKO$WT_mean <- rowMeans(rna.norm.WT.EKO[,4:6])
+rna.norm.WT.EKO$EKO_mean <- rowMeans(rna.norm.WT.EKO[,7:9])
+rna.norm.WT.EKO$log2FC <- log2((rna.norm.WT.EKO$WT_mean+0.1)/(rna.norm.WT.EKO$EKO_mean+0.1))
+
+#Load diff genes
+WTvsEKO.up <- read.table("data/rna/GSE92434_Down_EKO_vs_WT.txt", header = T, sep = "\t", quote = "", fill = T)
+WTvsEKO.up <- WTvsEKO.up[c(1,18,20)]
+colnames(WTvsEKO.up) <- c("refseq", "log2FC", "padj")
+WTvsEKO.up$symbol <- mapIds(org.Mm.eg.db, keys=WTvsEKO.up$refseq, column="SYMBOL", keytype="REFSEQ")
+WTvsEKO.up$entrezID <- mapIds(org.Mm.eg.db, keys=WTvsEKO.up$refseq, column="ENTREZID", keytype="REFSEQ")
+WTvsEKO.up <- WTvsEKO.up[order(WTvsEKO.up$padj),]
+WTvsEKO.up <- WTvsEKO.up[!is.na(WTvsEKO.up$symbol),]
+WTvsEKO.up <- WTvsEKO.up[!duplicated(WTvsEKO.up$symbol),]
+
+WTvsEKO.down <- read.table("data/rna/GSE92434_Up_EKO_vs_WT.txt", header = T, sep = "\t", quote = "", fill = T)
+WTvsEKO.down <- WTvsEKO.down[c(1,18,20)]
+colnames(WTvsEKO.down) <- c("refseq", "log2FC", "padj")
+WTvsEKO.down$symbol <- mapIds(org.Mm.eg.db, keys=WTvsEKO.down$refseq, column="SYMBOL", keytype="REFSEQ")
+WTvsEKO.down$entrezID <- mapIds(org.Mm.eg.db, keys=WTvsEKO.down$refseq, column="ENTREZID", keytype="REFSEQ")
+WTvsEKO.down <- WTvsEKO.down[order(WTvsEKO.down$padj),]
+WTvsEKO.down <- WTvsEKO.down[!is.na(WTvsEKO.down$symbol),]
+WTvsEKO.down <- WTvsEKO.down[!duplicated(WTvsEKO.down$symbol),]
+
+#Create categories
+rna.norm.WT.EKO.filt <- rna.norm.WT.EKO[rna.norm.WT.EKO$WT_mean > 1 | rna.norm.WT.EKO$EKO_mean >1,]
+rna.norm.WT.EKO.filt$group <- ifelse(rna.norm.WT.EKO.filt$symbol %in% WTvsEKO.up$symbol & rna.norm.WT.EKO.filt$log2FC>1, "UP", ifelse(rna.norm.WT.EKO.filt$symbol %in% WTvsEKO.down$symbol & rna.norm.WT.EKO.filt$log2FC< -1, "DOWN", ifelse(abs(rna.norm.WT.EKO.filt$log2FC)<log2(1.5) , "UBI", "Borderline")))
+
+```
+
+Merge expression data with Ebf1 annotation
+```{r}
+EBF1.anno.exp <- EBF1.anno[,1:4]
+EBF1.anno.exp <- EBF1.anno.exp[!duplicated(EBF1.anno.exp),]
+EBF1.anno.exp$peak_type <- ifelse(abs(EBF1.anno.exp$Distance_to_TSS)<=2500, "Promoter", "Distal")
+EBF1.anno.exp <- EBF1.anno.exp[!is.na(EBF1.anno.exp$peak_type),]
+EBF1.anno.exp <- merge(EBF1.anno.exp, rna.norm.WT.EKO.filt[,c(3,12,13)], by.x="Gene", by.y="symbol")
+```
+
+### 3.1.4 Gene set enrichemnt of EBF1 bound genes
+```{r}
+#Promoter
+EBF1.anno.exp.p <- EBF1.anno.exp[EBF1.anno.exp$peak_type=="Promoter",]
+GO.WT.EKO.list.promtoer <- list(Up=unique(EBF1.anno.exp.p[EBF1.anno.exp.p$group=="UP",]$EntrezID),Uqiquitous=unique(EBF1.anno.exp.p[EBF1.anno.exp.p$group=="UBI",]$EntrezID), Down=unique(EBF1.anno.exp.p[EBF1.anno.exp.p$group=="DOWN",]$EntrezID))
+
+source("script/general/r_functions/TG_theme.R")
+GO.WT.EKO.prom <- compareCluster(geneCluster = GO.WT.EKO.list.promtoer, fun = "enrichGO", 
+                OrgDb= org.Mm.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05)
+GO.plot.Ebf1.p <- dotplot(GO.WT.EKO.prom, showCategory=6,  color="pvalue")
+GO.plot.Ebf1.p[["data"]][["Cluster"]] <- factor(GO.plot.Ebf1.p[["data"]][["Cluster"]], levels=c("Up\n(397)", "Uqiquitous\n(2119)", "Down\n(546)"))
+GO.plot.Ebf1.p <- GO.plot.Ebf1.p + geom_point(aes(fill=log10(pvalue), color=Cluster)) +
+      scale_fill_gradient(low="black", high="white", limits=c(-50,0))+
+
+      scale_color_manual(values=c("#93302f", "black", "#1f426a"))+TG_theme()
+
+ggsave(path="output/plots/figure3/", filename="WTvsEKO_GO_promoter.pdf", plot = GO.plot.Ebf1.p, device = "pdf", dpi=300, height=10, width=7)
+
+
+#Enhancer
+EBF1.anno.exp.d <- EBF1.anno.exp[EBF1.anno.exp$peak_type=="Distal",]
+GO.WT.EKO.list.distal <- list(Up=unique(EBF1.anno.exp.d[EBF1.anno.exp.d$group=="UP",]$EntrezID),Uqiquitous=unique(EBF1.anno.exp.d[EBF1.anno.exp.d$group=="UBI",]$EntrezID), Down=unique(EBF1.anno.exp.d[EBF1.anno.exp.d$group=="DOWN",]$EntrezID))
+
+#Ehancer
+GO.WT.EKO.enh <- compareCluster(geneCluster = GO.WT.EKO.list.distal, fun = "enrichGO", 
+                OrgDb= org.Mm.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 0.05)
+GO.plot.Ebf1.d <- dotplot(GO.WT.EKO.enh, showCategory=6,  color="pvalue")
+GO.plot.Ebf1.d[["data"]][["Cluster"]] <- factor(GO.plot.Ebf1.d[["data"]][["Cluster"]], levels=c("Up\n(621)", "Uqiquitous\n(3328)", "Down\n(969)"))
+GO.plot.Ebf1.d <- GO.plot.Ebf1.d + geom_point(aes(fill=log10(pvalue), color=Cluster)) +
+    scale_fill_gradient(low="black", high="white",limits=c(-50,0))+
+      scale_color_manual(values=c("#93302f", "black", "#1f426a"))+TG_theme()
+
+ggsave(path="output/plots/figure3/", filename="WTvsEKO_GO_distal.pdf", plot = GO.plot.Ebf1.d, device = "pdf", dpi=300, height=10, width=7)
+
+```
+
+
+## 3.2 Ubiqutous genes associated with B cell growth (Tinas data)
+
+### 3.2.1 Overlapping Tinas KO data with annotated Ebf1 peaks
+```{r}
+#Loading info about guides with B cell development effect (from Tinas KO experiment)
+guide.info <- read.table("data/other/Bdev_guides/Bdev_guides_info.txt", header=TRUE, sep="\t")
+EBF1.anno.Bdev <- merge(guide.info, rna.norm.WT.EKO, by.x="Gene", by.y="symbol", all.x=T)
+
+#Extracting Ebf1 bound elements associated with B dev associated gene list
+EBF1.anno.Bdev <- EBF1.anno[EBF1.anno$Gene %in% guide.info$Gene,]
+EBF1.anno.Bdev <- merge(merge(EBF1.anno.Bdev, rna.norm.WT.EKO[,c(3,10:12)], by.x="Gene", by.y="symbol"), guide.info[,2:7], by="Gene")
+EBF1.anno.Bdev <- EBF1.anno.Bdev[,c(1,3,8:15,2,4:7)]
+colnames(EBF1.anno.Bdev) <- c("Gene", "entrezID", "Expression_WT", "Expression_EKO", "Expression_WTvsEKO","Name", "guideType","MeanBcount","Bcount_Fold_r26", "Bcount_pval", "peakID", "DistanceTSS", "PeakType", "Annotation", "InteractionScore")
+```
+
+### 3.2.2 B dev plot
+Plot of mean B cell count for guide pools (one per gene), color coded for WTvsEKO
+```{r}
+guide.info.pool <- guide.info[guide.info$Type != "single",]
+
+library(data.table)
+guide.info.pool <- melt(setDT(guide.info.pool), id.vars = colnames(guide.info.pool[,1:7]), variable.name = "rep")
+guide.info.pool <- data.frame(guide.info.pool[!is.na(guide.info.pool$value)])
+guide.info.pool <- merge(guide.info.pool, unique(EBF1.anno.Bdev[,c(1,5)]), by="Gene", all.x=T)
+guide.info.pool <- guide.info.pool[order(guide.info.pool$Expression_WTvsEKO, decreasing = T, na.last = F),]
+guide.info.pool <- guide.info.pool[guide.info.pool$Gene!="Myl4",] #Only one pbservation
+guide.info.pool <- guide.info.pool[guide.info.pool$Gene %in% c(EBF1.anno.Bdev$Gene, "R26"),]
+
+#plot
+source("script/general/r_functions/TG_theme.R")
+compare_means(value ~ Name,  data = guide.info.pool, ref.group = "R26",
+              method = "t.test")
+guide.plot <- ggboxplot(guide.info.pool, x = "Name", y = "value", fill = "Expression_WTvsEKO",  color= "black")+
+  geom_hline(yintercept = mean(guide.info.pool[guide.info.pool$Gene=="R26", "value"]), linetype = 2)+ 
+  scale_fill_gradientn(colours=c("#1f426a","#cbcad7",'white','white',"#dcccdf", "#93302f"),breaks=c(-10, -5,0,5, 10), values=scales::rescale(c(-10,-log2(1.5)-0.01, -log2(1.5), log2(1.5), log2(1.5)+0.01, 10)),limits=c(-12, 12))+
+  stat_compare_means(label = "p.signif", method = "t.test", ref.group = "R26", hide.ns = TRUE)+
+  TG_theme()+xlab("") + ylab("B cell count")
+
+ggsave(path="output/plots/figure3/", filename="Guide_plot.pdf", plot = guide.plot, device = "pdf", dpi=300, height=5, width=7)
+
+```
+
+
+## 3.3 EBf1 addicted genes
+For ebf1 dependent genes, Ebf1 degradation data from GSE201141
+
+### 3.3.1 Define gene sets
+```{r}
+#Load data (supplementary table)
+info.Ebf1.deg <- read_excel("data/rna/pnas.2210595119.sd01.xlsx")
+info.Ebf1.deg$entrezID <- mapIds(org.Mm.eg.db, keys=info.Ebf1.deg$Gene_Symbol, column="ENTREZID", keytype="SYMBOL")
+
+#Select rna-sea data
+rna.Ebf1.deg <- info.Ebf1.deg[, c(12,1,2,6)]
+colnames(rna.Ebf1.deg) <- c("entrezID","symbol", "RNA_LFC", "Sig_type")
+rna.Ebf1.deg <- data.frame(rna.Ebf1.deg)
+rna.Ebf1.deg <- rna.Ebf1.deg[rna.Ebf1.deg$Sig_type != "intron_only",]
+```
+
+### 4.3.2 GSEA of EBf1 additcted genes
+Gene ontology enrichment analysis of Ebf1 addicted genes
+```{r}
+rna.Ebf1.deg.ubi <- rna.Ebf1.deg[rna.Ebf1.deg$symbol %in% rna.norm.WT.EKO.filt$symbol,]
+rna.Ebf1.deg.ubi <- rna.Ebf1.deg.ubi[rna.Ebf1.deg.ubi$symbol %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UBI",]$symbol ,]
+rna.Ebf1.deg.ubi <- rna.Ebf1.deg.ubi[order(rna.Ebf1.deg.ubi$RNA_LFC),]
+rna.Ebf1.deg.ubi <- rna.Ebf1.deg.ubi[!is.na(rna.Ebf1.deg.ubi$entrezID),]
+
+GO.EBf1.addicted.list.50 <- list(Up=tail(rna.Ebf1.deg.ubi,50)$entrezID,  Down=head(rna.Ebf1.deg.ubi,50)$entrezID)
+GO.EBf1.addicted.50 <- compareCluster(geneCluster = GO.EBf1.addicted.list.50, fun = "enrichGO",
+                OrgDb= org.Mm.eg.db,
+                ont= "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.05,
+                qvalueCutoff  = 1, readable=T)
+
+GO.plot.Ebf1.addicted <- dotplot(GO.EBf1.addicted.50, showCategory=8,  color="pvalue")
+GO.plot.Ebf1.addicted <- GO.plot.Ebf1.addicted + geom_point(aes(fill=log10(pvalue), color=Cluster)) +
+    scale_fill_gradient(low="black", high="white")+
+      scale_color_manual(values=c("#c98335", "#799f55"), )+TG_theme()
+
+ggsave(path="output/plots/figure3/", filename="Ebf1_addicted_GO.pdf", plot = GO.plot.Ebf1.addicted, device = "pdf", dpi=300, height=10, width=7)
+
+
+rna.Ebf1.deg.f <- rna.Ebf1.deg.ubi[abs(rna.Ebf1.deg.ubi$RNA_LFC) > log2(1.5),]
+```
+
+## 3.4 Enhancers of Ebf1 addicted genes
+
+### 3.4.1 Define consensus peak set for element identification
+```{bash engine.opts='-l'}
+bash script/general/peak_union.sh data/atac/peaks/ATAC_FLproB_WT_idr_optimal_peak.narrowPeak data/atac/peaks/ATAC_FLproB_Ebf1KO_idr_optimal_peak.narrowPeak WT Ebf1KO output/data/figure3/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_info.bed
+
+cd output/data/figure3/peaks
+awk -v FS='\t' -v OFS='\t' '{print $1, $2, $3, $1":"$2"-"$3}' atac_FLproB_WT_Ebf1KO_idr_consensus_info.bed > atac_FLproB_WT_Ebf1KO_idr_consensus.bed
+cut -f1-3 atac_FLproB_WT_Ebf1KO_idr_consensus.bed > atac_FLproB_WT_Ebf1KO_idr_consensus_cut.bed
+```
+
+### 3.4.2 ICE-A annotation of consensus peaks in WT/Ebf1KO
+```{bash engine.opts='-l'}
+script_dir="script/figure3"
+bash $script_dir/icea_Ebf1_WT_EKO.sh
+```
+
+### 4.3.3 Extract enahcers linked to Ebf1 addicted genes
+```{r}
+#Load annotated data
+EBF1.anno.WT <- read.table("output/data/figure3//annotation/atac_FLproB_WT_H3K4me3_PLACseq_annotation/Peak_annotation/ATAC_WT_EKO/ATAC_WT_EKO_PLACseq_annotated.txt", header=TRUE, sep="\t")
+EBF1.anno.WT$peakID <- paste0(EBF1.anno.WT$Chr, ":", EBF1.anno.WT$Start, "-", EBF1.anno.WT$End)
+EBF1.anno.WT <- EBF1.anno.WT[,c(17,6,9,5,10,13,14)]
+EBF1.anno.WT$id <- paste0(EBF1.anno.WT$peakID, "_", EBF1.anno.WT$Gene)
+
+EBF1.anno.EKO <- read.table("output/data/figure3/annotation/atac_FLproB_Ebf1KO_H3K4me3_PLACseq_annotation/Peak_annotation/ATAC_WT_EKO/ATAC_WT_EKO_PLACseq_annotated.txt", header=TRUE, sep="\t")
+EBF1.anno.EKO$peakID <- paste0(EBF1.anno.EKO$Chr, ":", EBF1.anno.EKO$Start, "-", EBF1.anno.EKO$End)
+EBF1.anno.EKO <- EBF1.anno.EKO[,c(17,6,9,5,10,13,14)]
+EBF1.anno.EKO$id <- paste0(EBF1.anno.EKO$peakID, "_", EBF1.anno.EKO$Gene)
+
+#Add category based on Ebf1 deg (UBI/Up/Down) &WTvsEKO
+EBF1.anno.WT$Ebf1_deg_group <- ifelse(EBF1.anno.WT$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC>log2(1.5),]$symbol, "Up", ifelse(EBF1.anno.WT$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC< -log2(1.5),]$symbol, "Down", "NoDiff"))
+EBF1.anno.WT$WTvsEKO_group <- ifelse(EBF1.anno.WT$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UP",]$symbol, "UP", ifelse(EBF1.anno.WT$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="DOWN",]$symbol, "DOWN", ifelse(EBF1.anno.WT$Gene %in%rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UBI",]$symbol, "UBI", "Bordeline")))
+
+EBF1.anno.EKO$Ebf1_deg_group <- ifelse(EBF1.anno.EKO$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC>log2(1.5),]$symbol, "Up", ifelse(EBF1.anno.EKO$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC< -log2(1.5),]$symbol, "Down", "NoDiff"))
+EBF1.anno.EKO$WTvsEKO_group <- ifelse(EBF1.anno.EKO$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UP",]$symbol, "UP", ifelse(EBF1.anno.EKO$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="DOWN",]$symbol, "DOWN", ifelse(EBF1.anno.EKO$Gene %in%rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UBI",]$symbol, "UBI", "Bordeline")))
+
+
+#Filter for distal elements
+EBF1.anno.WT.d <- EBF1.anno.WT[EBF1.anno.WT$Peak_type !="Promoter" & EBF1.anno.WT$Annotation_method=="Interaction_anno",]
+EBF1.anno.WT.d <- EBF1.anno.WT.d[order(EBF1.anno.WT.d$Interaction_score),]
+EBF1.anno.WT.d <- EBF1.anno.WT.d[!duplicated(EBF1.anno.WT.d$id),]
+
+EBF1.anno.EKO.d <- EBF1.anno.EKO[EBF1.anno.EKO$Peak_type !="Promoter" & EBF1.anno.EKO$Annotation_method=="Interaction_anno",]
+EBF1.anno.EKO.d <- EBF1.anno.EKO.d[order(EBF1.anno.EKO.d$Interaction_score),]
+EBF1.anno.EKO.d <- EBF1.anno.EKO.d[!duplicated(EBF1.anno.EKO.d$id),]
+
+EBF1.anno.WT.d.EKO <- EBF1.anno.WT.d
+EBF1.anno.WT.d.EKO$inEKO <- ifelse(EBF1.anno.WT.d.EKO$id %in% EBF1.anno.EKO.d$id, 1, 0)
+Ebf1.bound.ubi.genes.Ebf1.dep <- EBF1.anno.WT.d.EKO[ EBF1.anno.WT.d.EKO$WTvsEKO_group=="UBI",]
+
+table(Ebf1.bound.ubi.genes.Ebf1.dep$Ebf1_deg_group, Ebf1.bound.ubi.genes.Ebf1.dep$inEKO,Ebf1.bound.ubi.genes.Ebf1.dep$WTvsEKO_group)
+
+
+#Filter for distal elements
+EBF1.anno.WT.p <- EBF1.anno.WT[EBF1.anno.WT$Peak_type =="Promoter" & EBF1.anno.WT$Annotation_method=="Proximal_anno",]
+EBF1.anno.WT.p <- EBF1.anno.WT.p[!duplicated(EBF1.anno.WT.p$id),]
+
+EBF1.anno.EKO.p <- EBF1.anno.EKO[EBF1.anno.EKO$Peak_type =="Promoter" & EBF1.anno.EKO$Annotation_method=="Proximal_anno",]
+
+EBF1.anno.WT.p.EKO <- EBF1.anno.WT.p
+EBF1.anno.WT.p.EKO$inEKO <- ifelse(EBF1.anno.WT.p.EKO$id %in% EBF1.anno.EKO.p$id, 1, 0)
+
+```
+
+
+### 3.4.3 ATACseq data from WT/EKO
+```{r}
+#Loading sample info
+samples.atac.WT.EKO <- read.table("data/atac/info/samples_atac_FLproB_WT_EKO.txt", header=TRUE, sep="\t", quote = "")
+
+#Extracting normalized coutns in GSE201141 atac-seq peaks
+dbo.atac.WT.EKO <- dba(sampleSheet=samples.atac.WT.EKO)
+counts.atac.WT.EKO <- dba.count(dbo.atac.WT.EKO, peaks="output/data/figure3/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_cut.bed", score=DBA_SCORE_NORMALIZED, summits = F)
+save(counts.atac.WT.EKO, file="output/rdata/figure3/counts.atac.WT.EKO_BdevPeaks.Rdata")
+load( file="output/rdata/figure3/counts.atac.WT.EKO_BdevPeaks.Rdata")
+
+#Saving raw counts from consensus peak set to data frame
+atac.WT.EKO.raw.count <- lapply(counts.atac.WT.EKO[["peaks"]],function(x) x[,6])
+atac.WT.EKO.raw.count.df<- as.data.frame(atac.WT.EKO.raw.count)
+rownames(atac.WT.EKO.raw.count.df) <- paste0(counts.atac.WT.EKO[["peaks"]][[1]][,1], ":", counts.atac.WT.EKO[["peaks"]][[1]][,2], "-", counts.atac.WT.EKO[["peaks"]][[1]][,3])
+colnames(atac.WT.EKO.raw.count.df) <- samples.atac.WT.EKO$SampleID
+
+#Extracting noramlized counts
+counts.atac.WT.EKO <- dba.normalize(counts.atac.WT.EKO)
+counts.atac.WT.EKO.norm <- dba.peakset(counts.atac.WT.EKO, bRetrieve=TRUE)
+counts.atac.WT.EKO.norm.df <- as.data.frame(counts.atac.WT.EKO.norm)
+counts.atac.WT.EKO.norm.df$peakID <- paste0(counts.atac.WT.EKO.norm.df$seqnames, ":", counts.atac.WT.EKO.norm.df$start, "-", counts.atac.WT.EKO.norm.df$end)
+counts.atac.WT.EKO.norm.df.mean <- data.frame(peakID=counts.atac.WT.EKO.norm.df$peakID, WT=rowMeans(counts.atac.WT.EKO.norm.df[,6:8]), 
+Ebf1KO=rowMeans(counts.atac.WT.EKO.norm.df[,9:11]))
+```
+
+```{r}
+#Creating coldata for DESeq2
+coldata.atac.WT.EKO <- samples.atac.WT.EKO[,3:4]
+rownames(coldata.atac.WT.EKO) <- samples.atac.WT.EKO$SampleID
+
+source("script/general/r_functions/DESeq2_fun.R")
+DESeq2_fun(counts = atac.WT.EKO.raw.count.df, coldata = coldata.atac.WT.EKO, selection = c(1:6), factor="Tissue", groups = c("WT","Ebf1KO"), filt=T, filt_n = 2, filt_value = 10)
+DE.Ebf1KOvsWT.result.df$log2FoldChange <- -DE.Ebf1KOvsWT.result.df$log2FoldChange
+DE.Ebf1KOvsWT.result.df$stat <- -DE.Ebf1KOvsWT.result.df$stat
+
+DE.Ebf1KOvsWT.result.df$atac.diff <- ifelse(!is.na(DE.Ebf1KOvsWT.result.df$padj) & DE.Ebf1KOvsWT.result.df$padj<0.05 &DE.Ebf1KOvsWT.result.df$log2FoldChange>log2(2), "UP", ifelse(!is.na(DE.Ebf1KOvsWT.result.df$padj) & DE.Ebf1KOvsWT.result.df$padj<0.05 &DE.Ebf1KOvsWT.result.df$log2FoldChange< -log2(2), "DOWN", "NODIFF"))
+```
+
+### 3.4.5 EBF1 overlap
+Find overlap
+```{bash engine.opts='-l'}
+bash script/general/bedtools_intersect_wa.sh output/data/figure3/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_cut.bed data/chip_cnr/peaks/GSE159957_230_238_a_Ebf1_IDR-peaks.bed output/data/figure3/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_Ebf1_overlap.bed
+```
+
+Organize data
+```{r}
+#Load enh info
+samples.atac.WT.EKO.info <- read.table("output/data/figure3/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_info.bed", header=F, sep="\t", quote = "")
+colnames(samples.atac.WT.EKO.info) <- c("chr", "start", "end", "group")
+samples.atac.WT.EKO.info$peakID <- paste0(samples.atac.WT.EKO.info$chr, ":", samples.atac.WT.EKO.info$start, "-", samples.atac.WT.EKO.info$end)
+
+#Load Ebf1 info
+ebf1.overlap <- read.table("output/data/figure3//peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_Ebf1_overlap.bed", header=F, sep="\t", quote = "")
+colnames(ebf1.overlap) <- c("chr", "start", "end")
+ebf1.overlap$peakID <- paste0(ebf1.overlap$chr, ":", ebf1.overlap$start, "-", ebf1.overlap$end)
+
+#merge and create grouping
+enh <- rbind(EBF1.anno.WT.d[,c(1,2,3,8,9,10)], EBF1.anno.EKO.d[,c(1,2,3,8,9,10)], by="id", all=T)
+enh <- enh[!duplicated(enh),]
+enh$Enh_in_WT <- ifelse(enh$peakID %in% samples.atac.WT.EKO.info[samples.atac.WT.EKO.info$group!="Ebf1KO",]$peakID, 1, 0)
+enh$Enh_in_EKO <- ifelse(enh$peakID %in% samples.atac.WT.EKO.info[samples.atac.WT.EKO.info$group!="WT",]$peakID, 1, 0)
+enh$Int_in_WT <- ifelse(enh$id %in% EBF1.anno.WT.d$id, 1, 0)
+enh$Int_in_EKO <- ifelse(enh$id %in% EBF1.anno.EKO.d$id, 1, 0)
+enh$Enh_in_celltype <- ifelse(enh$Enh_in_WT==1 & enh$Enh_in_EKO==0, "WT", ifelse(enh$Enh_in_WT==0 & enh$Enh_in_EKO==1, "Ebf1KO",ifelse(enh$Enh_in_WT==1 & enh$Enh_in_EKO==1, "Common", NA)))
+enh$Int_in_celltype <- ifelse(enh$Int_in_WT==1 & enh$Int_in_EKO==0, "WT", ifelse(enh$Int_in_WT==0 & enh$Int_in_EKO==1, "Ebf1KO",ifelse(enh$Int_in_WT==1 & enh$Int_in_EKO==1, "Common", NA)))
+enh <- enh[!is.na(enh$Enh_in_celltype) | !is.na(enh$Int_in_celltype),]
+
+enh$Ebf1 <- ifelse(enh$peakID %in% ebf1.overlap$peakID,1,0)
+enh <- merge(enh, DE.Ebf1KOvsWT.result.df[,c(1,3,9, 10)], by.x="peakID", by.y="row")
+enh <- merge(enh, DE.Ebf1KOvsWT.result.df[,c(1,2,3,9, 10)], by.x="peakID", by.y="row")
+enh$Ebf1 <- factor(enh$Ebf1)
+enh$Enh_in_celltype <- factor(enh$Enh_in_celltype)
+enh$Int_in_celltype <- factor(enh$Int_in_celltype, levels=c("Ebf1KO", "Common", "WT"))
+```
+
+## 3.5 EBF1 mediated change in chroamtin accessibility
+```{r}
+#distal
+enh.d <- enh[enh$Enh_in_WT==1 & enh$Int_in_WT==1 & enh$WTvsEKO_group!="Bordeline",c(1,6,8,13,16)]
+enh.d$atac_group <- ifelse(enh.d$Enh_in_EKO==1 & enh.d$atac.diff.x=="NODIFF", "NODIFF", ifelse(enh.d$Enh_in_EKO==1 & enh.d$atac.diff.x=="DOWN", "DOWN", ifelse(enh.d$Enh_in_EKO==1 & enh.d$atac.diff.x=="UP", "UP", ifelse(enh.d$Enh_in_EKO==0 & enh.d$atac.diff.x=="UP", "NEW", "NA"))))
+enh.d <- enh.d[enh.d$atac_group!="NA",c(1,2,4,6)]
+enh.d$atac_group <- factor(enh.d$atac_group, levels=c("DOWN", "NODIFF", "UP", "NEW"))
+enh.d <- enh.d[!duplicated(enh.d),]
+
+table(enh.d$Ebf1, enh.d$atac_group, enh.d$WTvsEKO_group)
+
+enh.d.agg <- enh.d %>%
+  group_by(atac_group, Ebf1, WTvsEKO_group)
+%>%
+  mutate(percent = value_var/sum(value_var))
+
+
+ggplot(enh.d, aes(fill=atac_group, y=Ebf1, x=Ebf1)) + 
+    geom_bar(position="fill", stat="identity")
+  
+#promoter
+enh.p <- rbind(EBF1.anno.WT.p[,c(1,2,3,
+                                 8,9,10)], EBF1.anno.EKO.p[,c(1,2,3,8,9,10)], by="id", all=T)
+enh.p <- enh.p[!duplicated(enh.p),]
+enh.p$Enh_in_WT <- ifelse(enh.p$peakID %in% samples.atac.WT.EKO.info[samples.atac.WT.EKO.info$group!="Ebf1KO",]$peakID, 1, 0)
+enh.p$Enh_in_EKO <- ifelse(enh.p$peakID %in% samples.atac.WT.EKO.info[samples.atac.WT.EKO.info$group!="WT",]$peakID, 1, 0)
+
+#enh <- enh[!is.na(enh$Enh_in_celltype),]
+enh.p$Ebf1 <- ifelse(enh.p$peakID %in% ebf1.overlap$peakID,1,0)
+enh.p <- merge(enh.p, DE.Ebf1KOvsWT.result.df[,c(1,3,9, 10)], by.x="peakID", by.y="row")
+enh.p$Ebf1 <- factor(enh.p$Ebf1)
+
+enh.pf <- enh.p[enh.p$Enh_in_WT==1  ,c(1,5,6,8,9,12)]
+enh.pf <- enh.pf[!duplicated(enh.pf),]
+#table(enh.f$atac.diff,enh.f$WTvsEKO_group, enh.f$Ebf1)
+enh.pf2  <- enh.pf[enh.pf$WTvsEKO_group=="UP",]
+table(enh.pf2$Enh_in_EKO, enh.pf2$atac.diff, enh.pf2$Ebf1)
+```
+
+
+
+```{r}
+Ebf1.bound.ubi.genes.Ebf1.dep2 <- merge(Ebf1.bound.ubi.genes.Ebf1.dep, DE.Ebf1KOvsWT.result.df[,c(1,3,9, 10)], by.x="peakID", by.y="row")
+table(Ebf1.bound.ubi.genes.Ebf1.dep2$Ebf1_deg_group, Ebf1.bound.ubi.genes.Ebf1.dep2$atac.diff, Ebf1.bound.ubi.genes.Ebf1.dep2$inEKO)
+table(Ebf1.bound.ubi.genes.Ebf1.dep2$Ebf1_deg_group)
+Ebf1.bound.ubi.genes.Ebf1.dep2$inEKO <- factor(Ebf1.bound.ubi.genes.Ebf1.dep2$inEKO)
+Ebf1.bound.ubi.genes.Ebf1.dep22 <- Ebf1.bound.ubi.genes.Ebf1.dep2[!duplicated(Ebf1.bound.ubi.genes.Ebf1.dep2$peakID, Ebf1.bound.ubi.genes.Ebf1.dep2$atac.diff),]
+
+Ebf1.bound.ubi.genes.Ebf1.deg.down <- Ebf1.bound.ubi.genes.Ebf1.dep2[Ebf1.bound.ubi.genes.Ebf1.dep2$Ebf1_deg_group=="Down",]
+Ebf1.bound.ubi.genes.Ebf1.deg.up <- Ebf1.bound.ubi.genes.Ebf1.dep2[Ebf1.bound.ubi.genes.Ebf1.dep2$Ebf1_deg_group=="Up",]
+
+test1 <- data.frame(merge(Ebf1.bound.ubi.genes.Ebf1.dep22, counts.atac.WT.EKO.norm.df.mean[,1:2], by="peakID"), celltype="WT") 
+colnames(test1) <-c(colnames(test1[,1:14]),"value", "celltype")
+test2 <- data.frame(merge(Ebf1.bound.ubi.genes.Ebf1.dep22, counts.atac.WT.EKO.norm.df.mean[,c(1,3)], by="peakID"), celltype="Ebf1KO")
+colnames(test2) <-c(colnames(test1[,1:14]),"value", "celltype")
+test <- rbind(test1, test2)
+
+
+ggplot(test, aes(celltype,log2FoldChange, fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","grey"), 6)))+
+    facet_grid(Ebf1_deg_group  ~ inEKO)+
+  ylim(-5,5)
++stat_compare_means(comparisons = my_comparisons, label.y = c(10.5), label="p.signif")
+
+```
+
+
+#Fig 3G (check)
+### ATAC
+```{r}
+#Loading sample info
+samples.atac.WT.EKO <- read.table("data/atac/info/samples_atac_FLproB_WT_EKO.txt", header=TRUE, sep="\t", quote = "")
+
+#Extracting normalized coutns in GSE201141 atac-seq peaks
+dbo.atac.WT.EKO <- dba(sampleSheet=samples.atac.WT.EKO)
+counts.atac.WT.EKO <- dba.count(dbo.atac.WT.EKO, peaks="output/data/data_4/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_cut.bed", score=DBA_SCORE_NORMALIZED, summits = F)
+#save(counts.atac.WT.EKO, file="output/data/data_4/rdata/counts.atac.WT.EKO_BdevPeaks.Rdata")
+load( file="../../LIANA/liana_2401/output/data/data_4/rdata/counts.atac.WT.EKO_BdevPeaks.Rdata")
+
+#Saving raw counts from consensus peak set to data frame
+atac.WT.EKO.raw.count <- lapply(counts.atac.WT.EKO[["peaks"]],function(x) x[,6])
+atac.WT.EKO.raw.count.df<- as.data.frame(atac.WT.EKO.raw.count)
+rownames(atac.WT.EKO.raw.count.df) <- paste0(counts.atac.WT.EKO[["peaks"]][[1]][,1], ":", counts.atac.WT.EKO[["peaks"]][[1]][,2], "-", counts.atac.WT.EKO[["peaks"]][[1]][,3])
+colnames(atac.WT.EKO.raw.count.df) <- samples.atac.WT.EKO$SampleID
+
+#Extracting noramlized counts
+counts.atac.WT.EKO <- dba.normalize(counts.atac.WT.EKO)
+counts.atac.WT.EKO.norm <- dba.peakset(counts.atac.WT.EKO, bRetrieve=TRUE)
+counts.atac.WT.EKO.norm.df <- as.data.frame(counts.atac.WT.EKO.norm)
+counts.atac.WT.EKO.norm.df$peakID <- paste0(counts.atac.WT.EKO.norm.df$seqnames, ":", counts.atac.WT.EKO.norm.df$start, "-", counts.atac.WT.EKO.norm.df$end)
+counts.atac.WT.EKO.norm.df.mean <- data.frame(peakID=counts.atac.WT.EKO.norm.df$peakID, WT=rowMeans(counts.atac.WT.EKO.norm.df[,6:8]), 
+Ebf1KO=rowMeans(counts.atac.WT.EKO.norm.df[,9:11]))
+
+#FC
+counts.atac.WT.EKO.norm.df.mean$FC_ATAC <- log2((counts.atac.WT.EKO.norm.df.mean$WT+0.1)/(counts.atac.WT.EKO.norm.df.mean$Ebf1KO+0.1))
+```
+
+### Histone ChIPseq
+```{r}
+#Loading sample info
+samples.chip.WT.EKO.histones <- read.table("../../LIANA/liana_2401/data/chip_cnr/info/samples_chipseq_GSE162858_FL_WT_Ebf1KO_histones.txt", header=TRUE, sep="\t", quote = "")
+
+#Extracting normalized coutns in GSE201141 atac-seq peaks
+dbo.chip.WT.EKO.histones <- dba(sampleSheet=samples.chip.WT.EKO.histones)
+counts.chip.WT.EKO.histones <- dba.count(dbo.chip.WT.EKO.histones, peaks="output/data/data_4/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_cut.bed", summits = F, score=DBA_SCORE_NORMALIZED)
+save(counts.chip.WT.EKO.histones, file="output/data/data_4/rdata/counts.chip.WT.EKO.histones_atac_consensus.Rdata")
+load( file="../../LIANA/liana_2401/output/data/data_4/rdata/counts.chip.WT.EKO.histones_atac_consensus.Rdata")
+
+#Saving raw counts from consensus peak set to data frame
+chip.WT.EKO.histones.raw.count <- lapply(counts.chip.WT.EKO.histones[["peaks"]],function(x) x[,6])
+chip.WT.EKO.histones.raw.count.df<- as.data.frame(chip.WT.EKO.histones.raw.count)
+rownames(chip.WT.EKO.histones.raw.count.df) <- paste0(counts.chip.WT.EKO.histones[["peaks"]][[1]][,1], ":", counts.chip.WT.EKO.histones[["peaks"]][[1]][,2], "-", counts.chip.WT.EKO.histones[["peaks"]][[1]][,3])
+colnames(chip.WT.EKO.histones.raw.count.df) <- samples.chip.WT.EKO.histones$SampleID
+
+#Extracting noramlized counts
+counts.chip.WT.EKO.histones <- dba.normalize(counts.chip.WT.EKO.histones)
+counts.chip.WT.EKO.histones.norm <- dba.peakset(counts.chip.WT.EKO.histones, bRetrieve=TRUE)
+counts.chip.WT.EKO.histones.norm.df <- as.data.frame(counts.chip.WT.EKO.histones.norm)
+counts.chip.WT.EKO.histones.norm.df$peakID <- paste0(counts.chip.WT.EKO.histones.norm.df$seqnames, ":", counts.chip.WT.EKO.histones.norm.df$start, "-", counts.chip.WT.EKO.histones.norm.df$end)
+counts.chip.WT.EKO.histones.norm.df.mean <- data.frame(peakID=counts.chip.WT.EKO.histones.norm.df$peakID, H3K4me3_WT=rowMeans(counts.chip.WT.EKO.histones.norm.df[,6:7]), H3K4me3_Ebf1KO=rowMeans(counts.chip.WT.EKO.histones.norm.df[,8:9]), H3K27me3_WT=rowMeans(counts.chip.WT.EKO.histones.norm.df[,10:11]),
+H3K27me3_Ebf1KO=rowMeans(counts.chip.WT.EKO.histones.norm.df[,12:13]), H3K27ac_WT=counts.chip.WT.EKO.histones.norm.df[,14],
+H3K27ac_Ebf1KO=counts.chip.WT.EKO.histones.norm.df[,15])
+
+#FC
+counts.chip.WT.EKO.histones.norm.df.mean$FC_H3K4me3 <- log2((counts.chip.WT.EKO.histones.norm.df.mean$H3K4me3_WT+0.1)/(counts.chip.WT.EKO.histones.norm.df.mean$H3K4me3_Ebf1KO+0.1))
+counts.chip.WT.EKO.histones.norm.df.mean$FC_H3K27me3 <- log2((counts.chip.WT.EKO.histones.norm.df.mean$H3K27me3_WT+0.1)/(counts.chip.WT.EKO.histones.norm.df.mean$H3K27me3_Ebf1KO+0.1))
+counts.chip.WT.EKO.histones.norm.df.mean$FC_H3K27ac <- log2((counts.chip.WT.EKO.histones.norm.df.mean$H3K27ac_WT+0.1)/(counts.chip.WT.EKO.histones.norm.df.mean$H3K27ac_Ebf1KO+0.1))
+```
+
+###Merge
+```{r}
+#FC
+atac_histone_wt_eko_fc <- merge(counts.atac.WT.EKO.norm.df.mean[,c(1,4)], counts.chip.WT.EKO.histones.norm.df.mean[,c(1,8:10)], by="peakID")
+
+#Norm
+atac_histone_wt_norm <- merge(counts.atac.WT.EKO.norm.df.mean[,c(1,2)], counts.chip.WT.EKO.histones.norm.df.mean[,c(1,2,4,6)], by="peakID")
+colnames(atac_histone_wt_norm) <- c("peakID", "ATAC", "H3K4me3", "H3K27me3", "H3K27ac")
+atac_histone_wt_norm$celltype <- "WT"
+
+atac_histone_eko_norm <- merge(counts.atac.WT.EKO.norm.df.mean[,c(1,3)], counts.chip.WT.EKO.histones.norm.df.mean[,c(1,3,5,7)], by="peakID")
+colnames(atac_histone_eko_norm) <- c("peakID", "ATAC", "H3K4me3", "H3K27me3", "H3K27ac")
+atac_histone_eko_norm$celltype <- "Ebf1KO"
+
+atac_histone_wt_eko_norm <- rbind(atac_histone_wt_norm, atac_histone_eko_norm)
+```
+
+### Enhacer info
+```{r}
+#Duw to technical issues, total nuber of sign interaction much higher in EKO => Use top 100k interactions (based on q-value). FIns q-value cutoff
+
+#WT
+#cutoff
+int.wt <-  read.table("../../LIANA/liana_2401/data/plac/21_174_175_H3K4me3_FLWT_5kb_ALL2ALL.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t")
+int.wt <- int.wt[order(int.wt$Q.Value_Bias),]
+int.wt.top <- int.wt[1:100000,]
+int.wt.cutoff <- -log10(max(int.wt.top$Q.Value_Bias))
+
+#Load annotated data
+enh.anno.WT <- read.table("../../LIANA/liana_2401/output/data/data_4/annotation/atac_FLproB_WT_H3K4me3_PLACseq_annotation/Peak_annotation/ATAC_WT_EKO/ATAC_WT_EKO_PLACseq_annotated.txt", header=TRUE, sep="\t")
+enh.anno.WT$peakID <- paste0(enh.anno.WT$Chr, ":", enh.anno.WT$Start, "-", enh.anno.WT$End)
+enh.anno.WT$peak_group <- ifelse(enh.anno.WT$Peak_type=="Promoter" & enh.anno.WT$Annotation_method=="Proximal_anno", "Promoter",  ifelse(enh.anno.WT$Peak_type!="Promoter" , "Distal", "other"))
+enh.anno.WT <- enh.anno.WT[enh.anno.WT$Annotation_method=="Proximal_anno" | (enh.anno.WT$Interaction_score < max(int.wt.top$Q.Value_Bias)),]
+enh.anno.WT <- enh.anno.WT[,c(17,6,9,5,18)]
+enh.anno.WT$id <- paste0(enh.anno.WT$peakID, "_", enh.anno.WT$Gene)
+
+#groups
+enh.anno.WT$Ebf1_deg_group <- ifelse(enh.anno.WT$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC>log2(1.5),]$symbol, "Up", ifelse(enh.anno.WT$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC< -log2(1.5),]$symbol, "Down", "NoDiff"))
+enh.anno.WT$WTvsEKO_group <- ifelse(enh.anno.WT$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UP",]$symbol, "UP", ifelse(enh.anno.WT$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="DOWN",]$symbol, "DOWN", ifelse(enh.anno.WT$Gene %in%rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UBI",]$symbol, "UBI", "Bordeline")))
+
+#EKO
+#cutoff
+int.eko <-  read.table("../../LIANA/liana_2401/data/plac/13_16_176_177_H3K4me3_FLEKO_5kb_ALL2ALL.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t")
+int.eko <- int.eko[order(int.eko$Q.Value_Bias),]
+int.eko.top <- int.eko[1:100000,]
+int.eko.cutoff <- -log10(max(int.eko.top$Q.Value_Bias))
+
+#Load annotations
+enh.anno.EKO <- read.table("../../LIANA/liana_2401/output/data/data_4/annotation/atac_FLproB_Ebf1KO_H3K4me3_PLACseq_annotation/Peak_annotation/ATAC_WT_EKO/ATAC_WT_EKO_PLACseq_annotated.txt", header=TRUE, sep="\t")
+enh.anno.EKO$peakID <- paste0(enh.anno.EKO$Chr, ":", enh.anno.EKO$Start, "-", enh.anno.EKO$End)
+enh.anno.EKO$peak_group <- ifelse(enh.anno.EKO$Peak_type=="Promoter" & enh.anno.EKO$Annotation_method=="Proximal_anno", "Promoter",  ifelse(enh.anno.EKO$Peak_type!="Promoter" , "Distal", "other"))
+enh.anno.EKO <- enh.anno.EKO[enh.anno.EKO$Annotation_method=="Proximal_anno" | (enh.anno.EKO$Interaction_score < max(int.eko.top$Q.Value_Bias)),]
+enh.anno.EKO <- enh.anno.EKO[,c(17,6,9,5,18)]
+enh.anno.EKO$id <- paste0(enh.anno.EKO$peakID, "_", enh.anno.EKO$Gene)
+
+#groups
+enh.anno.EKO$Ebf1_deg_group <- ifelse(enh.anno.EKO$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC>log2(1.5),]$symbol, "Up", ifelse(enh.anno.EKO$Gene %in% rna.Ebf1.deg[rna.Ebf1.deg$RNA_LFC< -log2(1.5),]$symbol, "Down", "NoDiff"))
+enh.anno.EKO$WTvsEKO_group <- ifelse(enh.anno.EKO$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UP",]$symbol, "UP", ifelse(enh.anno.EKO$Gene %in% rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="DOWN",]$symbol, "DOWN", ifelse(enh.anno.EKO$Gene %in%rna.norm.WT.EKO.filt[rna.norm.WT.EKO.filt$group=="UBI",]$symbol, "UBI", "Bordeline")))
+
+#Load enh info
+samples.atac.WT.EKO.info <- read.table("../../LIANA/liana_2401/output/data/data_4/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_info.bed", header=F, sep="\t", quote = "")
+colnames(samples.atac.WT.EKO.info) <- c("chr", "start", "end", "group")
+samples.atac.WT.EKO.info$peakID <- paste0(samples.atac.WT.EKO.info$chr, ":", samples.atac.WT.EKO.info$start, "-", samples.atac.WT.EKO.info$end)
+
+#Load Ebf1 info
+ebf1.overlap <- read.table("../../LIANA/liana_2401/output/data/data_4/peaks/atac_FLproB_WT_Ebf1KO_idr_consensus_Ebf1_overlap.bed", header=F, sep="\t", quote = "")
+colnames(ebf1.overlap) <- c("chr", "start", "end")
+ebf1.overlap$peakID <- paste0(ebf1.overlap$chr, ":", ebf1.overlap$start, "-", ebf1.overlap$end)
+
+#merge all
+enh <- rbind(enh.anno.WT, enh.anno.EKO)
+enh <- enh[!duplicated(enh),]
+enh$Enh_in_WT <- ifelse(enh$peakID %in% samples.atac.WT.EKO.info[samples.atac.WT.EKO.info$group!="Ebf1KO",]$peakID, 1, 0)
+enh$Enh_in_EKO <- ifelse(enh$peakID %in% samples.atac.WT.EKO.info[samples.atac.WT.EKO.info$group!="WT",]$peakID, 1, 0)
+enh$Int_in_WT <- ifelse(enh$id %in% enh.anno.WT$id, 1, 0)
+enh$Int_in_EKO <- ifelse(enh$id %in% enh.anno.EKO$id, 1, 0)
+enh$Enh_in_celltype <- ifelse(enh$Enh_in_WT==1 & enh$Enh_in_EKO==0, "WT", ifelse(enh$Enh_in_WT==0 & enh$Enh_in_EKO==1, "Ebf1KO",ifelse(enh$Enh_in_WT==1 & enh$Enh_in_EKO==1, "Common", NA)))
+enh$Int_in_celltype <- ifelse(enh$Int_in_WT==1 & enh$Int_in_EKO==0, "WT", ifelse(enh$Int_in_WT==0 & enh$Int_in_EKO==1, "Ebf1KO",ifelse(enh$Int_in_WT==1 & enh$Int_in_EKO==1, "Common", NA)))
+enh <- enh[!is.na(enh$Enh_in_celltype) | !is.na(enh$Int_in_celltype),]
+enh <- enh[!(enh$Enh_in_celltype=="WT" & enh$Int_in_celltype=="Ebf1KO") & !(enh$Enh_in_celltype=="Ebf1KO" & enh$Int_in_celltype=="WT"),]
+
+#Ebf1  
+enh$Ebf1 <- ifelse(enh$peakID %in% ebf1.overlap$peakID,1,0)
+enh$Ebf1 <- factor(enh$Ebf1)
+enh$Enh_in_celltype <- factor(enh$Enh_in_celltype)
+enh$Int_in_celltype <- factor(enh$Int_in_celltype, levels=c("Ebf1KO", "Common", "WT"))
+enh <- enh[,c(1,6,2:5,7:8, 13:15)]
+
+###FC
+#merge with atac/hist
+enh.fc <- merge(enh, atac_histone_wt_eko_fc, by="peakID")
+enh.fc$cat <- ifelse(enh.fc$WTvsEKO_group=="UP" & enh.fc$Ebf1_deg_group=="Up", "Repression", ifelse(enh.fc$WTvsEKO_group=="UBI" & enh.fc$Ebf1_deg_group=="Up", "Addicted repression", ifelse(enh.fc$WTvsEKO_group=="UBI" & enh.fc$Ebf1_deg_group=="NoDiff", "No effect",ifelse(enh.fc$WTvsEKO_group=="UBI" & enh.fc$Ebf1_deg_group=="Down", "Additcted activation", ifelse(enh.fc$WTvsEKO_group=="DOWN" & enh.fc$Ebf1_deg_group=="Down", "Activation", "other")))))
+enh.fc <- enh.fc[enh.fc$cat!="other",]
+enh.fc$cat <- factor(enh.fc$cat, levels=c("Repression", "Addicted repression","No effect", "Additcted activation", "Activation" ))
+enh.fc.effect <- enh.fc[enh.fc$cat !="No effect",]
+enh.fc.no.effect <- enh.fc[enh.fc$cat =="No effect",]
+enh.fc.no.effect <- enh.fc.no.effect[!duplicated(enh.fc.no.effect$peakID),]
+
+enh.fc.f <- rbind(enh.fc.effect, enh.fc.no.effect[!enh.fc.no.effect$peakID %in% enh.fc.effect$peakID,])
+
+enh.fc.f <- enh.fc.f[enh.fc.f$Int_in_celltype !="Ebf1KO" & enh.fc.f$Enh_in_celltype !="Ebf1KO",]
+#filt 
+enh.fc.filt <- enh.fc.f[,c(1,6,11,16,12:15)]
+enh.fc.filt <- enh.fc.filt[!duplicated(enh.fc.filt),]
+
+enh.fc.dup <- enh.fc.filt[duplicated(enh.fc.filt$peakID),]
+enh.fc.filt.nodup <- enh.fc.filt[!enh.fc.filt$peakID %in% enh.fc.dup$peakID,]
+
+
+###norm
+#merge with atac/hist
+enh.norm <- merge(enh, atac_histone_wt_eko_norm, by="peakID")
+enh.norm$cat <- ifelse(enh.norm$WTvsEKO_group=="UP" & enh.norm$Ebf1_deg_group=="Up", "Repression", ifelse(enh.norm$WTvsEKO_group=="UBI" & enh.norm$Ebf1_deg_group=="Up", "Addicted repression", ifelse(enh.norm$WTvsEKO_group=="UBI" & enh.norm$Ebf1_deg_group=="NoDiff", "No effect",ifelse(enh.norm$WTvsEKO_group=="UBI" & enh.norm$Ebf1_deg_group=="Down", "Additcted activation", ifelse(enh.norm$WTvsEKO_group=="DOWN" & enh.norm$Ebf1_deg_group=="Down", "Activation", "other")))))
+enh.norm <- enh.norm[enh.norm$cat!="other",]
+enh.norm$cat <- factor(enh.norm$cat, levels=c("Repression", "Addicted repression","No effect", "Additcted activation", "Activation" ))
+enh.norm.effect <- enh.norm[enh.norm$cat !="No effect",]
+enh.norm.no.effect <- enh.norm[enh.norm$cat =="No effect",]
+enh.norm.no.effect <- enh.norm.no.effect[!duplicated(enh.norm.no.effect$peakID),]
+
+enh.norm.f <- rbind(enh.norm.effect, enh.norm.no.effect[!enh.norm.no.effect$peakID %in% enh.norm.effect$peakID,])
+
+#filt 
+enh.norm.filt <- enh.norm.f[,c(1,6,11,16,17,12:15)]
+
+enh.norm.dup <- enh.norm.filt[duplicated(enh.norm.filt[,c(1,4)]),]
+enh.norm.filt.nodup <- enh.norm.filt[!enh.norm.filt$peakID %in% enh.norm.dup$peakID,]
+```
+
+###Plot
+```{r}
+ggplot(enh.fc.filt.nodup[enh.fc.filt.nodup$peak_group=="Distal",], aes(Ebf1,FC_ATAC, fill=Ebf1))+
+  geom_hline(yintercept = 0)+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","black"), 6)))+
+    facet_grid(.  ~ cat)+ylim(-3,6)+
+  stat_compare_means(comparisons =  list(c("0","1")), label="p.signif", label.y = c(5))
+
+ggplot(enh.norm.filt.nodup[enh.norm.filt.nodup$peak_group=="Distal",], aes(celltype,log2(ATAC+1), fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","#A90804"), 6)))+
+    facet_grid(Ebf1  ~ cat)+ylim(0,12)+
+  stat_compare_means(comparisons =  list(c("WT","Ebf1KO")), label="p.signif", label.y = c(10))
+
+```
+

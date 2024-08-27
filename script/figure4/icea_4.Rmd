@@ -85,7 +85,6 @@ BT_elements_anno_iceaEKO_distal <- BT_elements_anno_iceaEKO_distal[BT_elements_a
 
 Merge annotation of T elements for P2C2 and WT/Ebf1KO
 ```{r}
-
 T.element.anno <- T_elements_anno_iceaP2C2_distal[,c(18, 17, 1:3, 6,9,5)]
 
 T.element.anno$Tgene_p2c2 <- "tgene"
@@ -141,7 +140,6 @@ tss_anno_iceaWT$id <- paste0(tss_anno_iceaWT$peakID, "_", tss_anno_iceaWT$Gene)
 tss_anno_iceaWT_distal <- tss_anno_iceaWT[tss_anno_iceaWT$Annotation_method=="Interaction_anno" &tss_anno_iceaWT$Peak_type!="Promoter",]
 tss_anno_iceaWT_distal <- tss_anno_iceaWT_distal[tss_anno_iceaWT_distal$Interaction_score<max(int.wt.top$Q.Value_Bias),]
 
-
 tss_anno_iceaEKO <- read.table("output/data/figure4/annotation/Consensus_atac_Ebf1KOproB_H3K4me3_PLAC_annotation_custom_TSS/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
 tss_anno_iceaEKO$peakID <- paste0(tss_anno_iceaEKO$Chr, ":", tss_anno_iceaEKO$Start, "-", tss_anno_iceaEKO$End)
 tss_anno_iceaEKO$id <- paste0(tss_anno_iceaEKO$peakID, "_", tss_anno_iceaEKO$Gene)
@@ -194,7 +192,19 @@ T.element.anno$ebf1 <- ifelse(T.element.anno$Gene.y %in% custom_tss_ebf1$peakID,
 T.element.anno$tss_p2c2 <- ifelse(T.element.anno$id.y %in% tss_anno_iceaP2C2_distal$id, "alt", "NA")
 T.element.anno$tss_WT<- ifelse(T.element.anno$id.y %in% tss_anno_iceaWT_distal$id, "alt", "NA")
 T.element.anno$tss_EKO <- ifelse(T.element.anno$id.y %in% tss_anno_iceaEKO_distal$id,"alt", "NA")
+
+#Save for supplementary
+T.element.anno.supp <- T.element.anno[,c(1,3:8,10:11,16:22)]
+T.element.anno.supp$Tgene_WT <- ifelse(T.element.anno.supp$Tgene_WT=="tgene", 1,0)
+T.element.anno.supp$Tgene_EKO <- ifelse(T.element.anno.supp$Tgene_EKO=="tgene", 1,0)
+T.element.anno.supp$tss_p2c2 <- ifelse(T.element.anno.supp$tss_p2c2=="alt", 1,0)
+T.element.anno.supp$tss_WT <- ifelse(T.element.anno.supp$tss_WT=="alt", 1,0)
+T.element.anno.supp$tss_EKO <- ifelse(T.element.anno.supp$tss_EKO=="alt", 1,0)
+T.element.anno.supp$ebf1 <- ifelse(T.element.anno.supp$ebf1=="Ebf1", 1,0)
+colnames(T.element.anno.supp) <- c("peakID", "Chr", "Start", "End", "EntrezID", "Tgene", "Distance_to_Tgene", "Tgene_in_WT", "Tgene_in_Ebf1KO", "Alternative_promoter", "Distance_to_alt_promoter", "Alt_promoter_type", "Ebf1_occupancy", "Alt_promoter_in_P2C2", "Alt_promoter_in_WT","Alt_promoter_in_Ebf1KO")
+write.table(T.element.anno.supp, file = "output/data/figure4/Supp_table_1G_alternative_promoters_Tgenes.txt", quote = FALSE, sep = "\t", row.names = FALSE, col.names = T)
 ```
+
 
 
 ## 4.3 Circos plot
@@ -220,9 +230,6 @@ circos.alt.pseudo <- data.frame(section="Alt_pseudo", name=unique(T.element.anno
 circos <- rbind(circos.t.enh,circos.t.prom, circos.alt.prom, circos.alt.pseudo)
 circos$x <- 1:nrow(circos)
 circos$section <- factor(circos$section, levels=c("T_enhancer", "T_promoter", "Alt_promoter", "Alt_pseudo"))
-
-#Scaling
-circos$x <- ifelse(circos$section!="T_enhancer", circos$x*2,circos$x)
 
 #color
 cols <- c("#59595b","#274267", "#632a54", "#799f55")
@@ -271,7 +278,7 @@ par(mar = c(0.5, 0.5, 0.5, 0.5))
 
 #p2c2
 circos.clear()
-circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=26.5, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
 circos.initialize(circos$section, x = circos$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.p2c2)){
@@ -280,7 +287,7 @@ for (i in 1:nrow(links.p2c2)){
 
 #Wt
 circos.clear()
-circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=26.5, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
 circos.initialize(circos$section, x = circos$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.WT)){
@@ -289,7 +296,7 @@ for (i in 1:nrow(links.WT)){
 
 #Ebf1KO
 circos.clear()
-circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=26.5, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
 circos.initialize(circos$section, x = circos$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.EKO)){

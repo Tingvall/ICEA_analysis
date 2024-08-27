@@ -376,7 +376,7 @@ Enh.Prom.pairs.sig.summary.element <- Enh.Prom.pairs.sig.summary %>%
 Barplot
 ```{r}
 dist.lab <- c("<10kb", "10-50kb", "50-150kb", ">150kp") 
-names(dist.lab) = unique(Enh.Prom.pairs.sig.summary$DistanceBin)
+names(dist.lab) = levels(Enh.Prom.pairs.sig.summary$DistanceBin)
 
 Enh.plot <-ggplot(data=Enh.Prom.pairs.sig.summary.element[Enh.Prom.pairs.sig.summary.element$count==1,], aes(x=method, y=percent, fill=method)) +
   geom_bar(stat="identity", position=position_dodge(width = 0.5), width=0.8, color="black")+
