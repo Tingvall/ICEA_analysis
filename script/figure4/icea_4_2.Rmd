@@ -1,0 +1,706 @@
+---
+title: "ICE-A: Figure 4 2"
+output: html_notebook
+---
+
+# 4 Investigation of alternative promoters for EBF1 bound T-lineage associated elements
+
+## 4.0 Preperations
+Run before:
+conda activate liana_analysis_env
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/anaconda3/envs/liana_analysis_env/lib
+
+Setting working directory
+```{r setup}
+knitr::opts_knit$set(root.dir = normalizePath("/mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/"))
+```
+
+Loading packages
+```{r}
+packages <- c("readxl", "AnnotationDbi", "org.Mm.eg.db", "clusterProfiler", "ggplot2", "ggpubr", "circlize", "data.table", "DiffBind", "tidyr", "htmltools")
+lapply(packages, library, character.only = TRUE)
+```
+
+4.1 Annotate putative elements in B progenitors
+Annotate consensus peaks set with EKO/WT PLACseq data. Annotate interaction option for 4.5 (longrange track generation)
+```{bash engine.opts='-l'}
+script_dir="script/figure4"
+bash $script_dir/icea_consensus_230238_p2c2_atac_WT_EKO_annotate_interactions.sh
+```
+
+
+## 4.2 Define B/T elements
+
+### 4.2.1 Identify B/T associated peaks
+
+T elements: distal elements annotated to T gene list in P2C2
+```{r}
+#Load T genes
+t.genes <- read.table("output/data/figure2/genelists/Tcell_genes.txt", sep = "\t")
+
+#Load annotaiton of consensus peaks
+T_elements_anno_iceaP2C2 <- read.table("output/data/figure2/annotation/atac_230238_p2c2_consensus_peaks_P2C2_H3K4me3_PLAC_annotation/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+T_elements_anno_iceaP2C2$peakID <- paste0(T_elements_anno_iceaP2C2$Chr, ":", T_elements_anno_iceaP2C2$Start, "-", T_elements_anno_iceaP2C2$End)
+T_elements_anno_iceaP2C2$id <- paste0(T_elements_anno_iceaP2C2$peakID, "_", T_elements_anno_iceaP2C2$Gene)
+T_elements_anno_iceaP2C2_distal <- T_elements_anno_iceaP2C2[T_elements_anno_iceaP2C2$Annotation_method=="Interaction_anno" &T_elements_anno_iceaP2C2$Peak_type!="Promoter",]
+
+#Extract T elements: Peak in P2C2 & linked to T gene
+BT_elements_info <- read.table("output/data/figure2/peaks/atac_230238_p2c2_idr_consensus_info.bed", header=F, sep="\t")
+colnames(BT_elements_info) <- c("chr", "start", "end", "anno")
+BT_elements_info$peakID <- paste0(BT_elements_info$chr, ":", BT_elements_info$start, "-", BT_elements_info$end)
+
+#Filter
+T_elements_anno_iceaP2C2_distal <- T_elements_anno_iceaP2C2_distal[T_elements_anno_iceaP2C2_distal$Gene %in% t.genes$V1,]
+T_elements_anno_iceaP2C2_distal <- T_elements_anno_iceaP2C2_distal[T_elements_anno_iceaP2C2_distal$peakID %in% BT_elements_info[BT_elements_info$anno!= "230238",]$peakID,]
+T_elements_anno_iceaP2C2_distal <- T_elements_anno_iceaP2C2_distal[order(T_elements_anno_iceaP2C2_distal$Interaction_score),]
+T_elements_anno_iceaP2C2_distal <- T_elements_anno_iceaP2C2_distal[!duplicated(T_elements_anno_iceaP2C2_distal$id),]
+
+#write.table(T_elements_anno_iceaP2C2_distal[,1:3], "output/data/figure4/T_elements_anno_iceaP2C2_distal.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+B elements: distal elements annotated to B gene list in WT proB
+```{r}
+#Load T genes
+b.genes <- read.table("output/data/figure2/genelists/Bcell_genes.txt", sep = "\t")
+
+#Load annotaiton of consensus peaks
+B_elements_anno_iceaWT <- read.table("output/data/figure4/annotation/Consensus_atac_WTproB_H3K4me3_PLAC_annotation/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+B_elements_anno_iceaWT$peakID <- paste0(B_elements_anno_iceaWT$Chr, ":", B_elements_anno_iceaWT$Start, "-", B_elements_anno_iceaWT$End)
+B_elements_anno_iceaWT$id <- paste0(B_elements_anno_iceaWT$peakID, "_", B_elements_anno_iceaWT$Gene)
+B_elements_anno_iceaWT_distal <- B_elements_anno_iceaWT[B_elements_anno_iceaWT$Annotation_method=="Interaction_anno" &B_elements_anno_iceaWT$Peak_type!="Promoter",]
+
+#Filter
+B_elements_anno_iceaWT_distal <- B_elements_anno_iceaWT_distal[B_elements_anno_iceaWT_distal$Gene %in% b.genes$V1,]
+B_elements_anno_iceaWT_distal <- B_elements_anno_iceaWT_distal[B_elements_anno_iceaWT_distal$peakID %in% BT_elements_info[BT_elements_info$anno!= "P2C2",]$peakID,]
+B_elements_anno_iceaWT_distal <- B_elements_anno_iceaWT_distal[order(B_elements_anno_iceaWT_distal$Interaction_score),]
+B_elements_anno_iceaWT_distal <- B_elements_anno_iceaWT_distal[!duplicated(B_elements_anno_iceaWT_distal$id),]
+
+#write.table(T_elements_anno_iceaP2C2_distal[,1:3], "output/data/figure4/T_elements_anno_iceaP2C2_distal.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+### 4.2.2 B/T element association in alternative celltypes
+```{r}
+#Duw to technical issues, numer of interction vary between celltypes. Select top interactions (basde on Q-balue), matching lowser number.
+int.p2c2 <-  read.table("data/interactions/P2C2_H3K4me3_FitHiChIP.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t")
+int.wt <-  read.table("data/interactions/21_174_175_H3K4me3_FLWT_5kb_ALL2ALL.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t")
+int.eko <-  read.table("data/interactions/13_16_176_177_H3K4me3_FLEKO_5kb_ALL2ALL.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t")
+nint <- min(nrow(int.p2c2), nrow(int.wt), nrow(int.eko))
+
+int.p2c2 <- int.p2c2[order(int.p2c2$Q.Value_Bias),]
+int.p2c2.top <- int.p2c2[1:nint,]
+int.p2c2.cutoff <- -log10(max(int.p2c2.top$Q.Value_Bias))
+
+int.wt <- int.wt[order(int.wt$Q.Value_Bias),]
+int.wt.top <- int.wt[1:nint,]
+int.wt.cutoff <- -log10(max(int.wt.top$Q.Value_Bias))
+
+int.eko <- int.eko[order(int.eko$Q.Value_Bias),]
+int.eko.top <- int.eko[1:nint,]
+int.eko.cutoff <- -log10(max(int.eko.top$Q.Value_Bias))
+
+#Load annotaiton of consensus peaks
+BT_elements_anno_iceaP2C2 <- read.table("output/data/figure2/annotation/atac_230238_p2c2_consensus_peaks_P2C2_H3K4me3_PLAC_annotation/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+BT_elements_anno_iceaP2C2$peakID <- paste0(BT_elements_anno_iceaP2C2$Chr, ":", BT_elements_anno_iceaP2C2$Start, "-", BT_elements_anno_iceaP2C2$End)
+BT_elements_anno_iceaP2C2$id <- paste0(BT_elements_anno_iceaP2C2$peakID, "_", BT_elements_anno_iceaP2C2$Gene)
+BT_elements_anno_iceaP2C2_distal <- BT_elements_anno_iceaP2C2[BT_elements_anno_iceaP2C2$Annotation_method=="Interaction_anno" &BT_elements_anno_iceaP2C2$Peak_type!="Promoter",]
+BT_elements_anno_iceaP2C2_distal <- BT_elements_anno_iceaP2C2_distal[BT_elements_anno_iceaP2C2_distal$Interaction_score<max(int.p2c2.top$Q.Value_Bias),]
+
+BT_elements_anno_iceaWT <- read.table("output/data/figure4/annotation/Consensus_atac_WTproB_H3K4me3_PLAC_annotation/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+BT_elements_anno_iceaWT$peakID <- paste0(BT_elements_anno_iceaWT$Chr, ":", BT_elements_anno_iceaWT$Start, "-", BT_elements_anno_iceaWT$End)
+BT_elements_anno_iceaWT$id <- paste0(BT_elements_anno_iceaWT$peakID, "_", BT_elements_anno_iceaWT$Gene)
+BT_elements_anno_iceaWT_distal <- BT_elements_anno_iceaWT[BT_elements_anno_iceaWT$Annotation_method=="Interaction_anno" &BT_elements_anno_iceaWT$Peak_type!="Promoter",]
+BT_elements_anno_iceaWT_distal <- BT_elements_anno_iceaWT_distal[BT_elements_anno_iceaWT_distal$Interaction_score<max(int.wt.top$Q.Value_Bias),]
+
+BT_elements_anno_iceaEKO <- read.table("output/data/figure4/annotation/Consensus_atac_Ebf1KOproB_H3K4me3_PLAC_annotation/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+BT_elements_anno_iceaEKO$peakID <- paste0(BT_elements_anno_iceaEKO$Chr, ":", BT_elements_anno_iceaEKO$Start, "-", BT_elements_anno_iceaEKO$End)
+BT_elements_anno_iceaEKO$id <- paste0(BT_elements_anno_iceaEKO$peakID, "_", BT_elements_anno_iceaEKO$Gene)
+BT_elements_anno_iceaEKO_distal <- BT_elements_anno_iceaEKO[BT_elements_anno_iceaEKO$Annotation_method=="Interaction_anno" &BT_elements_anno_iceaEKO$Peak_type!="Promoter",]
+BT_elements_anno_iceaEKO_distal <- BT_elements_anno_iceaEKO_distal[BT_elements_anno_iceaEKO_distal$Interaction_score<max(int.eko.top$Q.Value_Bias),]
+```
+
+Merge annotation of T elements for P2C2 and WT/Ebf1KO
+```{r}
+#T elements
+T.element.anno <- T_elements_anno_iceaP2C2_distal[,c(18, 17, 1:3, 6,9,5)]
+
+T.element.anno$Tgene_p2c2 <- "tgene"
+T.element.anno$Tgene_WT<- ifelse(T.element.anno$id %in% BT_elements_anno_iceaWT_distal$id, "tgene", "NA")
+T.element.anno$Tgene_EKO<- ifelse(T.element.anno$id %in% BT_elements_anno_iceaEKO_distal$id, "tgene", "NA")
+
+#B elements
+B.element.anno <- B_elements_anno_iceaWT_distal[,c(18, 17, 1:3, 6,9,5)]
+
+B.element.anno$Bgene_WT <- "bgene"
+B.element.anno$Bgene_EKO<- ifelse(B.element.anno$id %in% BT_elements_anno_iceaEKO_distal$id, "bgene", "NA")
+B.element.anno$Bgene_p2c2 <- ifelse(B.element.anno$id %in% BT_elements_anno_iceaP2C2_distal$id, "bgene", "NA")
+```
+
+
+
+## 4.3 Alternative tss
+
+### 4.3.1 Define promoters & pseudopromoters
+
+For annotation to pseudopromters, custom tss locations are required. All potential promoters/pseudopromoters regions defines as ATAC-seq peaks overlapping H3K4me3 in other celltype
+```{bash engine.opts='-l'}
+#Alt promoters in B
+bash script/general/bedtools_intersect_wa.sh data/atac/peaks/ATAC_FLproB_WT_idr_optimal_peak.narrowPeak data/chip_cnr/peaks/H3K4me3_WT_optimal_set.IDR0.05.narrowPeak output/data/figure4/elements/WT_atac_H3K4me3_overlap.bed
+
+#Alt promoters in T
+bash script/general/bedtools_intersect_wa.sh data/atac/peaks/p2c2_atac_idr.optimal_peak.narrowPeak data/chip_cnr/peaks/CnR_P2C2_H3K4me3_consensus_peaks.bed output/data/figure4/elements/P2C2_atac_H3K4me3_overlap.bed
+```
+
+Organize defined promoters regions to be compatible with custom TSS input in ICE_A
+```{r}
+#B
+#Load custom promoter regions
+custom.promoters.B <- read.table("output/data/figure4/elements/WT_atac_H3K4me3_overlap.bed", header=F, sep="\t", quote = "")
+custom.promoters.B <- custom.promoters.B[,1:3]
+colnames(custom.promoters.B) <- c("chr", "start", "end")
+custom.promoters.B$peakID <- paste0(custom.promoters.B$chr, ":",custom.promoters.B$start, "-", custom.promoters.B$end)
+custom.promoters.B <- custom.promoters.B[!duplicated(custom.promoters.B),]
+
+#Writing custom tss.txt file for ICE-A annotation
+custom.promoters.B <- custom.promoters.B[,c(4,1:3)]
+custom.promoters.B$strand=0
+write.table(custom.promoters.B, "output/data/figure4/annotation/custom_tss_B.txt", quote = F, sep = "\t", row.names = F, col.names = F)
+
+
+#T
+custom.promoters.T <- read.table("output/data/figure4/elements/P2C2_atac_H3K4me3_overlap.bed", header=F, sep="\t", quote = "")
+custom.promoters.T <- custom.promoters.T[,1:3]
+colnames(custom.promoters.T) <- c("chr", "start", "end")
+custom.promoters.T$peakID <- paste0(custom.promoters.T$chr, ":",custom.promoters.T$start, "-", custom.promoters.T$end)
+custom.promoters.T <- custom.promoters.T[!duplicated(custom.promoters.T),]
+
+#Writing custom tss.txt file for ICE-A annotation
+custom.promoters.T <- custom.promoters.T[,c(4,1:3)]
+custom.promoters.T$strand=0
+write.table(custom.promoters.T, "output/data/figure4/annotation/custom_tss_T.txt", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+
+### 4.3.2 Custom annotation with defined alternative promoters
+
+```{bash engine.opts='-l'}
+script_dir="script/figure4"
+bash $script_dir/icea_consensus_atac_P2C2_WT_EKO_custom_tss_2.sh
+```
+
+### 4.3.3 Alternative annotation
+```{r}
+#T elements
+#Load annotaiton of consensus peaks
+tss_anno_iceaP2C2_T <- read.table("output/data/figure4/annotation/Consensus_atac_P2C2_H3K4me3_PLAC_annotation_custom_TSS_B/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+tss_anno_iceaP2C2_T$peakID <- paste0(tss_anno_iceaP2C2_T$Chr, ":", tss_anno_iceaP2C2_T$Start, "-", tss_anno_iceaP2C2_T$End)
+tss_anno_iceaP2C2_T$id <- paste0(tss_anno_iceaP2C2_T$peakID, "_", tss_anno_iceaP2C2_T$Gene)
+tss_anno_iceaP2C2_T_distal <- tss_anno_iceaP2C2_T[tss_anno_iceaP2C2_T$Annotation_method=="Interaction_anno" &tss_anno_iceaP2C2_T$Peak_type!="Promoter",]
+tss_anno_iceaP2C2_T_distal <- tss_anno_iceaP2C2_T_distal[tss_anno_iceaP2C2_T_distal$Interaction_score<max(int.p2c2.top$Q.Value_Bias),]
+
+tss_anno_iceaWT_T <- read.table("output/data/figure4/annotation/Consensus_atac_WTproB_H3K4me3_PLAC_annotation_custom_TSS_B//Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+tss_anno_iceaWT_T$peakID <- paste0(tss_anno_iceaWT_T$Chr, ":", tss_anno_iceaWT_T$Start, "-", tss_anno_iceaWT_T$End)
+tss_anno_iceaWT_T$id <- paste0(tss_anno_iceaWT_T$peakID, "_", tss_anno_iceaWT_T$Gene)
+tss_anno_iceaWT_T_distal <- tss_anno_iceaWT_T[tss_anno_iceaWT_T$Annotation_method=="Interaction_anno" &tss_anno_iceaWT_T$Peak_type!="Promoter",]
+tss_anno_iceaWT_T_distal <- tss_anno_iceaWT_T_distal[tss_anno_iceaWT_T_distal$Interaction_score<max(int.wt.top$Q.Value_Bias),]
+
+tss_anno_iceaEKO_T <- read.table("output/data/figure4/annotation/Consensus_atac_Ebf1KOproB_H3K4me3_PLAC_annotation_custom_TSS_B/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+tss_anno_iceaEKO_T$peakID <- paste0(tss_anno_iceaEKO_T$Chr, ":", tss_anno_iceaEKO_T$Start, "-", tss_anno_iceaEKO_T$End)
+tss_anno_iceaEKO_T$id <- paste0(tss_anno_iceaEKO_T$peakID, "_", tss_anno_iceaEKO_T$Gene)
+tss_anno_iceaEKO_T_distal <- tss_anno_iceaEKO_T[tss_anno_iceaEKO_T$Annotation_method=="Interaction_anno" &tss_anno_iceaEKO_T$Peak_type!="Promoter",]
+tss_anno_iceaEKO_T_distal <- tss_anno_iceaEKO_T_distal[tss_anno_iceaEKO_T_distal$Interaction_score<max(int.eko.top$Q.Value_Bias),]
+
+
+#B elements
+#Load annotaiton of consensus peaks
+tss_anno_iceaP2C2_B <- read.table("output/data/figure4/annotation/Consensus_atac_P2C2_H3K4me3_PLAC_annotation_custom_TSS_T/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+tss_anno_iceaP2C2_B$peakID <- paste0(tss_anno_iceaP2C2_B$Chr, ":", tss_anno_iceaP2C2_B$Start, "-", tss_anno_iceaP2C2_B$End)
+tss_anno_iceaP2C2_B$id <- paste0(tss_anno_iceaP2C2_B$peakID, "_", tss_anno_iceaP2C2_B$Gene)
+tss_anno_iceaP2C2_B_distal <- tss_anno_iceaP2C2_B[tss_anno_iceaP2C2_B$Annotation_method=="Interaction_anno" &tss_anno_iceaP2C2_B$Peak_type!="Promoter",]
+tss_anno_iceaP2C2_B_distal <- tss_anno_iceaP2C2_B_distal[tss_anno_iceaP2C2_B_distal$Interaction_score<max(int.p2c2.top$Q.Value_Bias),]
+
+tss_anno_iceaWT_B <- read.table("output/data/figure4/annotation/Consensus_atac_WTproB_H3K4me3_PLAC_annotation_custom_TSS_T/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+tss_anno_iceaWT_B$peakID <- paste0(tss_anno_iceaWT_B$Chr, ":", tss_anno_iceaWT_B$Start, "-", tss_anno_iceaWT_B$End)
+tss_anno_iceaWT_B$id <- paste0(tss_anno_iceaWT_B$peakID, "_", tss_anno_iceaWT_B$Gene)
+tss_anno_iceaWT_B_distal <- tss_anno_iceaWT_B[tss_anno_iceaWT_B$Annotation_method=="Interaction_anno" &tss_anno_iceaWT_B$Peak_type!="Promoter",]
+tss_anno_iceaWT_B_distal <- tss_anno_iceaWT_B_distal[tss_anno_iceaWT_B_distal$Interaction_score<max(int.wt.top$Q.Value_Bias),]
+
+tss_anno_iceaEKO_B <- read.table("output/data/figure4/annotation/Consensus_atac_Ebf1KOproB_H3K4me3_PLAC_annotation_custom_TSS_T/Peak_annotation/atac_230238_p2c2_consensus/atac_230238_p2c2_consensus_PLACseq_annotated.txt", header=TRUE, sep="\t")
+tss_anno_iceaEKO_B$peakID <- paste0(tss_anno_iceaEKO_B$Chr, ":", tss_anno_iceaEKO_B$Start, "-", tss_anno_iceaEKO_B$End)
+tss_anno_iceaEKO_B$id <- paste0(tss_anno_iceaEKO_B$peakID, "_", tss_anno_iceaEKO_B$Gene)
+tss_anno_iceaEKO_B_distal <- tss_anno_iceaEKO_B[tss_anno_iceaEKO_B$Annotation_method=="Interaction_anno" &tss_anno_iceaEKO_B$Peak_type!="Promoter",]
+tss_anno_iceaEKO_B_distal <- tss_anno_iceaEKO_B_distal[tss_anno_iceaEKO_B_distal$Interaction_score<max(int.eko.top$Q.Value_Bias),]
+```
+
+Annotate custom TSS (to define real/pseudo-promoters)
+```{bash engine.opts='-l'}
+cd output/data/figure4/annotation
+
+#Alt prom in B
+cut -f2-4 custom_tss_B.txt > custom_tss_B.bed
+annotatePeaks.pl custom_tss_B.bed mm10 > custom_tss_B_homer_annotation.txt
+awk -v FS='\t' -v OFS='\t' '{print $2, $3, $4, $16, $10}' custom_tss_B_homer_annotation.txt > custom_tss_B_homer_annotation_cut.txt
+
+#Alt prom in T
+cut -f2-4 custom_tss_T.txt > custom_tss_T.bed
+annotatePeaks.pl custom_tss_T.bed mm10 > custom_tss_T_homer_annotation.txt
+awk -v FS='\t' -v OFS='\t' '{print $2, $3, $4, $16, $10}' custom_tss_T_homer_annotation.txt > custom_tss_T_homer_annotation_cut.txt
+```
+
+```{r}
+#Atl in B
+custom_tss_anno_B <- read.table("output/data/figure4/annotation/custom_tss_B_homer_annotation_cut.txt", header=T, sep="\t")
+custom_tss_anno_B$Start <- custom_tss_anno_B$Start-1
+custom_tss_anno_B$peakID <- paste0(custom_tss_anno_B$Chr, ":", custom_tss_anno_B$Start, "-", custom_tss_anno_B$End)
+custom_tss_anno_B$promoter <- ifelse(abs(custom_tss_anno_B$Distance.to.TSS)<= 1000,1,0)
+write.table(custom_tss_anno_B[custom_tss_anno_B$promoter==1,1:3], "output/data/figure4/annotation/custom_tss_promoters_B.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+write.table(custom_tss_anno_B[custom_tss_anno_B$promoter==0,1:3], "output/data/figure4/annotation/custom_tss_pseudopromoters_B.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+
+#Atl in T
+custom_tss_anno_T <- read.table("output/data/figure4/annotation/custom_tss_T_homer_annotation_cut.txt", header=T, sep="\t")
+custom_tss_anno_T$Start <- custom_tss_anno_T$Start-1
+custom_tss_anno_T$peakID <- paste0(custom_tss_anno_T$Chr, ":", custom_tss_anno_T$Start, "-", custom_tss_anno_T$End)
+custom_tss_anno_T$promoter <- ifelse(abs(custom_tss_anno_T$Distance.to.TSS)<= 1000,1,0)
+write.table(custom_tss_anno_T[custom_tss_anno_T$promoter==1,1:3], "output/data/figure4/annotation/custom_tss_promoters_T.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+write.table(custom_tss_anno_T[custom_tss_anno_T$promoter==0,1:3], "output/data/figure4/annotation/custom_tss_pseudopromoters_T.bed", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+### 4.3.4 Overlap with EBF1 biding in alternative TSS
+```{bash engine.opts='-l'}
+#ALt in B
+bash script/general/bedtools_intersect_wa.sh output/data/figure4/annotation/custom_tss_B.bed data/chip_cnr/peaks/GSE159957_230_238_a_Ebf1_IDR-peaks.bed output/data/figure4/annotation/custom_tss_Ebf1_overlap_B.bed
+
+#Alt in T
+bash script/general/bedtools_intersect_wa.sh output/data/figure4/annotation/custom_tss_T.bed data/chip_cnr/peaks/GSE159957_230_238_a_Ebf1_IDR-peaks.bed output/data/figure4/annotation/custom_tss_Ebf1_overlap_T.bed
+```
+
+```{r}
+#Alt in B
+custom_tss_ebf1_B <- read.table("output/data/figure4/annotation/custom_tss_Ebf1_overlap_B.bed", header=F, sep="\t")
+colnames(custom_tss_ebf1_B) <- c("chr", "start", "end")
+custom_tss_ebf1_B$peakID <- paste0(custom_tss_ebf1_B$chr, ":", custom_tss_ebf1_B$start, "-", custom_tss_ebf1_B$end)
+
+#ALt inT
+custom_tss_ebf1_T <- read.table("output/data/figure4/annotation/custom_tss_Ebf1_overlap_T.bed", header=F, sep="\t")
+colnames(custom_tss_ebf1_T) <- c("chr", "start", "end")
+custom_tss_ebf1_T$peakID <- paste0(custom_tss_ebf1_T$chr, ":", custom_tss_ebf1_T$start, "-", custom_tss_ebf1_T$end)
+```
+
+
+### 4.3.5 Combine
+```{r}
+#T elements
+# Alterantive tss (based on WT annotation)
+tss.alt.T <- tss_anno_iceaWT_T_distal[,c(18,17,1:3, 9,5, 14)]
+tss.alt.T <- tss.alt.T[tss.alt.T$peakID %in% T.element.anno$peakID,]
+tss.alt.T <- tss.alt.T[order(tss.alt.T$Interaction_score),]
+tss.alt.T <- tss.alt.T[!duplicated(tss.alt.T),]
+
+#Add info about real/pseudo-promoter
+T.element.anno <- merge(T.element.anno, tss.alt.T[,c(2,1,3:5,6, 7)], by="peakID", all.x=T)
+T.element.anno$promoter <- ifelse(T.element.anno$Gene.y %in% custom_tss_anno_B[custom_tss_anno_B$promoter==1,]$peakID, "Promoter",ifelse(T.element.anno$Gene.y %in% custom_tss_anno_B[custom_tss_anno_B$promoter==0,]$peakID, "Pseudo","NA")) 
+T.element.anno$ebf1 <- ifelse(T.element.anno$Gene.y %in% custom_tss_ebf1_B$peakID, "Ebf1","NA") 
+
+#Add info about interaction in cell types
+T.element.anno$tss_p2c2 <- ifelse(T.element.anno$id.y %in% tss_anno_iceaP2C2_T_distal$id, "alt", "NA")
+T.element.anno$tss_WT<- ifelse(T.element.anno$id.y %in% tss_anno_iceaWT_T_distal$id, "alt", "NA")
+T.element.anno$tss_EKO <- ifelse(T.element.anno$id.y %in% tss_anno_iceaEKO_T_distal$id,"alt", "NA")
+
+#Save for supplementary
+T.element.anno.supp <- T.element.anno[,c(1,3:8,9,10:11,16:22)]
+T.element.anno.supp$Tgene_P2C2 <- ifelse(T.element.anno.supp$Tgene_p2c2=="tgene", 1,0)
+T.element.anno.supp$Tgene_WT <- ifelse(T.element.anno.supp$Tgene_WT=="tgene", 1,0)
+T.element.anno.supp$Tgene_EKO <- ifelse(T.element.anno.supp$Tgene_EKO=="tgene", 1,0)
+T.element.anno.supp$tss_p2c2 <- ifelse(T.element.anno.supp$tss_p2c2=="alt", 1,0)
+T.element.anno.supp$tss_WT <- ifelse(T.element.anno.supp$tss_WT=="alt", 1,0)
+T.element.anno.supp$tss_EKO <- ifelse(T.element.anno.supp$tss_EKO=="alt", 1,0)
+T.element.anno.supp$ebf1 <- ifelse(T.element.anno.supp$ebf1=="Ebf1", 1,0)
+colnames(T.element.anno.supp) <- c("peakID", "Chr", "Start", "End", "EntrezID", "Tgene", "Distance_to_Tgene", "Tgene_in_WT", "Tgene_in_Ebf1KO", "Alternative_promoter", "Distance_to_alt_promoter", "Alt_promoter_type", "Ebf1_occupancy", "Alt_promoter_in_P2C2", "Alt_promoter_in_WT","Alt_promoter_in_Ebf1KO")
+#write.table(T.element.anno.supp, file = "output/data/figure4/Supp_table_1G_alternative_promoters_Tgenes.txt", quote = FALSE, sep = "\t", row.names = FALSE, col.names = T)
+
+
+
+#B elements
+# Alterantive tss (based on WT annotation)
+tss.alt.B <- tss_anno_iceaP2C2_B_distal[,c(18,17,1:3, 9,5, 14)]
+tss.alt.B <- tss.alt.B[tss.alt.B$peakID %in% B.element.anno$peakID,]
+tss.alt.B <- tss.alt.B[order(tss.alt.B$Interaction_score),]
+tss.alt.B <- tss.alt.B[!duplicated(tss.alt.B),]
+
+#Add info about real/pseudo-promoter
+B.element.anno <- merge(B.element.anno, tss.alt.B[,c(2,1,3:5,6, 7)], by="peakID", all.x=T)
+B.element.anno$promoter <- ifelse(B.element.anno$Gene.y %in% custom_tss_anno_T[custom_tss_anno_T$promoter==1,]$peakID, "Promoter",ifelse(B.element.anno$Gene.y %in% custom_tss_anno_T[custom_tss_anno_T$promoter==0,]$peakID, "Pseudo","NA")) 
+B.element.anno$ebf1 <- ifelse(B.element.anno$Gene.y %in% custom_tss_ebf1_T$peakID, "Ebf1","NA") 
+
+#Add info about interaction in cell types
+B.element.anno$tss_p2c2 <- ifelse(B.element.anno$id.y %in% tss_anno_iceaP2C2_B_distal$id, "alt", "NA")
+B.element.anno$tss_WT<- ifelse(B.element.anno$id.y %in% tss_anno_iceaWT_B_distal$id, "alt", "NA")
+B.element.anno$tss_EKO <- ifelse(B.element.anno$id.y %in% tss_anno_iceaEKO_B_distal$id,"alt", "NA")
+
+#Save for supplementary
+B.element.anno.supp <- B.element.anno[,c(1,3:8,9,10:11,16:22)]
+B.element.anno.supp$Bgene_P2C2 <- ifelse(B.element.anno.supp$Bgene_p2c2=="bgene", 1,0)
+B.element.anno.supp$Bgene_WT <- ifelse(B.element.anno.supp$Bgene_WT=="bgene", 1,0)
+B.element.anno.supp$Bgene_EKO <- ifelse(B.element.anno.supp$Bgene_EKO=="bgene", 1,0)
+B.element.anno.supp$tss_p2c2 <- ifelse(B.element.anno.supp$tss_p2c2=="alt", 1,0)
+B.element.anno.supp$tss_WT <- ifelse(B.element.anno.supp$tss_WT=="alt", 1,0)
+B.element.anno.supp$tss_EKO <- ifelse(B.element.anno.supp$tss_EKO=="alt", 1,0)
+B.element.anno.supp$ebf1 <- ifelse(B.element.anno.supp$ebf1=="Ebf1", 1,0)
+colnames(B.element.anno.supp) <- c("peakID", "Chr", "Start", "End", "EntrezID", "Tgene", "Distance_to_Tgene", "Tgene_in_WT", "Tgene_in_Ebf1KO", "Alternative_promoter", "Distance_to_alt_promoter", "Alt_promoter_type", "Ebf1_occupancy", "Alt_promoter_in_P2C2", "Alt_promoter_in_WT","Alt_promoter_in_Ebf1KO")
+#write.table(T.element.anno.supp, file = "output/data/figure4/Supp_table_1G_alternative_promoters_Tgenes.txt", quote = FALSE, sep = "\t", row.names = FALSE, col.names = T)
+```
+
+
+
+## 4.3 Circos plot
+
+### 4.3.1 Filter and organize input
+
+Order
+```{r}
+#T
+T.element.anno.sort <- T.element.anno
+T.element.anno.sort$Chr.x <- factor(gsub("chr","",T.element.anno.sort$Chr.x), levels = c(1:19, "X", "Y")) 
+T.element.anno.sort$Chr.y <- factor(gsub("chr","",T.element.anno.sort$Chr.y), levels = c(1:19, "X", "Y"))   
+T.element.anno.sort <- T.element.anno.sort[order(T.element.anno.sort$Chr.y, T.element.anno.sort$Start.y),]
+
+#B
+B.element.anno.sort <- B.element.anno
+B.element.anno.sort$Chr.x <- factor(gsub("chr","",B.element.anno.sort$Chr.x), levels = c(1:19, "X", "Y")) 
+B.element.anno.sort$Chr.y <- factor(gsub("chr","",B.element.anno.sort$Chr.y), levels = c(1:19, "X", "Y"))   
+B.element.anno.sort <- B.element.anno.sort[order(B.element.anno.sort$Chr.y, B.element.anno.sort$Start.y),]
+
+```
+
+Plot -T
+```{r}
+#Oranize for circos
+circos.t.enh <- data.frame(section="T_enhancer", name=unique(T.element.anno.sort[order(T.element.anno.sort$Chr.x, T.element.anno.sort$Start.x),]$peakID))
+circos.t.prom <- data.frame(section="T_promoter", name=unique(T.element.anno.sort[order(T.element.anno.sort$Gene.x),]$Gene.x))
+circos.alt.prom <- data.frame(section="Alt_promoter", name=unique(T.element.anno.sort[!is.na(T.element.anno.sort$Gene.y) & T.element.anno.sort$promoter=="Promoter" ,]$Gene.y))
+circos.alt.pseudo <- data.frame(section="Alt_pseudo", name=unique(T.element.anno.sort[!is.na(T.element.anno.sort$Gene.y) & T.element.anno.sort$promoter=="Pseudo",]$Gene.y))
+
+circos.T <- rbind(circos.t.enh,circos.t.prom, circos.alt.prom, circos.alt.pseudo)
+circos.T$x <- 1:nrow(circos.T)
+circos.T$section <- factor(circos.T$section, levels=c("T_enhancer", "T_promoter", "Alt_promoter", "Alt_pseudo"))
+
+#color
+cols <- c("#59595b","#274267", "#632a54", "#799f55")
+
+#p2c2
+links.p2c2.T <- na.omit(rbind(data.frame(from=T.element.anno.sort[T.element.anno.sort$Tgene_p2c2=="tgene",]$peakID, to=T.element.anno.sort[T.element.anno.sort$Tgene_p2c2=="tgene",]$Gene.x, section="T_promoter"), data.frame(from=T.element.anno.sort[T.element.anno.sort$promoter=="Promoter" & T.element.anno.sort$tss_p2c2=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$peakID, to=T.element.anno.sort[T.element.anno.sort$promoter=="Promoter" &  T.element.anno.sort$tss_p2c2=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_promoter"), data.frame(from=T.element.anno.sort[T.element.anno.sort$promoter=="Pseudo" & T.element.anno.sort$tss_p2c2=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$peakID, to=T.element.anno.sort[T.element.anno.sort$promoter=="Pseudo" &  T.element.anno.sort$tss_p2c2=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_pseudo")))
+links.p2c2.T <- merge(links.p2c2.T, circos.T[,2:3], by.x="from", by.y="name")
+links.p2c2.T <- merge(links.p2c2.T, circos.T[,2:3], by.x="to", by.y="name")
+links.p2c2.T <- links.p2c2.T[,c(2,1,3,4,5)]
+colnames(links.p2c2.T) <- c("from", "to", "section","x1", "x2")
+links.p2c2.T <- links.p2c2.T[!duplicated(links.p2c2.T),]
+links.p2c2.T$col <- ifelse(links.p2c2.T$section=="Alt_pseudo", cols[4], ifelse(links.p2c2.T$section=="Alt_promoter", cols[3], cols[2]))
+links.p2c2.T$section <- factor(links.p2c2.T$section, levels=c("T_promoter", "Alt_promoter", "Alt_pseudo"))
+links.p2c2.T <- links.p2c2.T[order(links.p2c2.T$section),]
+
+#wt
+links.WT.T <- na.omit(rbind(data.frame(from=T.element.anno.sort[T.element.anno.sort$Tgene_WT=="tgene",]$peakID, to=T.element.anno.sort[T.element.anno.sort$Tgene_WT=="tgene",]$Gene.x, section="T_promoter"), data.frame(from=T.element.anno.sort[T.element.anno.sort$promoter=="Promoter" & T.element.anno.sort$tss_WT=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$peakID, to=T.element.anno.sort[T.element.anno.sort$promoter=="Promoter"&  T.element.anno.sort$tss_WT=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_promoter"), data.frame(from=T.element.anno.sort[T.element.anno.sort$promoter=="Pseudo" & T.element.anno.sort$tss_WT=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$peakID, to=T.element.anno.sort[T.element.anno.sort$promoter=="Pseudo" &  T.element.anno.sort$tss_WT=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_pseudo")))
+links.WT.T <- merge(links.WT.T, circos.T[,2:3], by.x="from", by.y="name")
+links.WT.T <- merge(links.WT.T, circos.T[,2:3], by.x="to", by.y="name")
+links.WT.T <- links.WT.T[,c(2,1,3,4,5)]
+colnames(links.WT.T) <- c("from", "to", "section","x1", "x2")
+links.WT.T <- links.WT.T[!duplicated(links.WT.T),]
+links.WT.T$col <- ifelse(links.WT.T$section=="Alt_pseudo", cols[4], ifelse(links.WT.T$section=="Alt_promoter", cols[3], cols[2]))
+links.WT.T$section <- factor(links.WT.T$section, levels=c("T_promoter", "Alt_promoter", "Alt_pseudo"))
+links.WT.T <- links.WT.T[order(links.WT.T$section),]
+
+#EBf1KO
+links.EKO.T <- na.omit(rbind(data.frame(from=T.element.anno.sort[T.element.anno.sort$Tgene_EKO=="tgene",]$peakID, to=T.element.anno.sort[T.element.anno.sort$Tgene_EKO=="tgene",]$Gene.x, section="T_promoter"), data.frame(from=T.element.anno.sort[T.element.anno.sort$promoter=="Promoter" & T.element.anno.sort$tss_EKO=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$peakID, to=T.element.anno.sort[T.element.anno.sort$promoter=="Promoter" &  T.element.anno.sort$tss_EKO=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_promoter"), data.frame(from=T.element.anno.sort[T.element.anno.sort$promoter=="Pseudo" & T.element.anno.sort$tss_EKO=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$peakID, to=T.element.anno.sort[T.element.anno.sort$promoter=="Pseudo" &  T.element.anno.sort$tss_EKO=="alt" & T.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_pseudo")))
+links.EKO.T <- merge(links.EKO.T, circos.T[,2:3], by.x="from", by.y="name")
+links.EKO.T <- merge(links.EKO.T, circos.T[,2:3], by.x="to", by.y="name")
+links.EKO.T <- links.EKO.T[,c(2,1,3,4,5)]
+colnames(links.EKO.T) <- c("from", "to", "section","x1", "x2")
+links.EKO.T <- links.EKO.T[!duplicated(links.EKO.T),]
+links.EKO.T$col <- ifelse(links.EKO.T$section=="Alt_pseudo", cols[4], ifelse(links.EKO.T$section=="Alt_promoter", cols[3], cols[2]))
+links.EKO.T$section <- factor(links.EKO.T$section, levels=c("T_promoter", "Alt_promoter", "Alt_pseudo"))
+links.EKO.T <- links.EKO.T[order(links.EKO.T$section),]
+
+
+##plot
+circos.sum.T <- aggregate(circos.T$x, list(circos.T$section), FUN=mean) 
+circos.sum.T$x.adj <- max(circos.sum.T$x)-circos.sum.T$x+max(circos.T$x)/360*30
+
+#cairo_pdf("output/plots/figure4/Tgene_alternative_promoters_circos.pdf", width = 12, height=6)
+layout(matrix(1:3, 1, 3))
+par(mar = c(0.5, 0.5, 0.5, 0.5))
+
+#p2c2
+circos.clear()
+circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.initialize(circos.T$section, x = circos.T$x)
+circos.track(ylim=c(0,1), bg.col = cols)
+for (i in 1:nrow(links.p2c2.T)){
+  circos.link("T_enhancer", links.p2c2.T[i,"x1"], links.p2c2.T[i,"section"], links.p2c2.T[i,"x2"], lwd=0.2,col = links.p2c2.T[i,"col"])
+}
+
+#Wt
+circos.clear()
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.initialize(circos.T$section, x = circos.T$x)
+circos.track(ylim=c(0,1), bg.col = cols)
+for (i in 1:nrow(links.WT.T)){
+  circos.link("T_enhancer", links.WT.T[i,"x1"], links.WT.T[i,"section"], links.WT.T[i,"x2"], lwd=0.2,  col = links.WT.T[i,"col"])
+}
+
+#Ebf1KO
+circos.clear()
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.initialize(circos.T$section, x = circos.T$x)
+circos.track(ylim=c(0,1), bg.col = cols)
+for (i in 1:nrow(links.EKO.T)){
+  circos.link("T_enhancer", links.EKO.T[i,"x1"], links.EKO.T[i,"section"], links.EKO.T[i,"x2"], lwd=0.2, col = links.EKO.T[i,"col"])
+}
+#dev.off()
+
+length(links.p2c2.T[links.p2c2.T$section=="T_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.WT.T[links.WT.T$section=="T_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.EKO.T[links.EKO.T$section=="T_promoter",]$from)#/length(unique(links.p2c2$from))*100
+
+length(links.p2c2.T[links.p2c2.T$section=="Alt_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.WT.T[links.WT.T$section=="Alt_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.EKO.T[links.EKO.T$section=="Alt_promoter",]$from)#/length(unique(links.p2c2$from))*100
+
+length(links.p2c2.T[links.p2c2.T$section=="Alt_pseudo",]$from)#/length(unique(links.p2c2$from))*100
+length(links.WT.T[links.WT.T$section=="Alt_pseudo",]$from)#/length(unique(links.p2c2$from))*100
+length(links.EKO.T[links.EKO.T$section=="Alt_pseudo",]$from)#/length(unique(links.p2c2$from))*100
+
+```
+
+Plot -B
+```{r}
+#Oranize for circos
+circos.b.enh <- data.frame(section="B_enhancer", name=unique(B.element.anno.sort[order(B.element.anno.sort$Chr.x, B.element.anno.sort$Start.x),]$peakID))
+circos.b.prom <- data.frame(section="B_promoter", name=unique(B.element.anno.sort[order(B.element.anno.sort$Gene.x),]$Gene.x))
+circos.alt.prom.b <- data.frame(section="Alt_promoter", name=unique(B.element.anno.sort[!is.na(B.element.anno.sort$Gene.y) & B.element.anno.sort$promoter=="Promoter" ,]$Gene.y))
+circos.alt.pseudo.b <- data.frame(section="Alt_pseudo", name=unique(B.element.anno.sort[!is.na(B.element.anno.sort$Gene.y) & B.element.anno.sort$promoter=="Pseudo",]$Gene.y))
+
+circos.B <- rbind(circos.b.enh,circos.b.prom, circos.alt.prom.b, circos.alt.pseudo.b)
+circos.B$x <- 1:nrow(circos.B)
+circos.B$section <- factor(circos.B$section, levels=c("B_enhancer", "B_promoter", "Alt_promoter", "Alt_pseudo"))
+
+#color
+cols <- c("#59595b","#274267", "#632a54", "#799f55")
+
+#p2c2
+links.p2c2.B <- na.omit(rbind(data.frame(from=B.element.anno.sort[B.element.anno.sort$Bgene_p2c2=="bgene",]$peakID, to=B.element.anno.sort[B.element.anno.sort$Bgene_p2c2=="bgene",]$Gene.x, section="B_promoter"), data.frame(from=B.element.anno.sort[B.element.anno.sort$promoter=="Promoter" & B.element.anno.sort$tss_p2c2=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$peakID, to=B.element.anno.sort[B.element.anno.sort$promoter=="Promoter" &  B.element.anno.sort$tss_p2c2=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_promoter"), data.frame(from=B.element.anno.sort[B.element.anno.sort$promoter=="Pseudo" & B.element.anno.sort$tss_p2c2=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$peakID, to=B.element.anno.sort[B.element.anno.sort$promoter=="Pseudo" &  B.element.anno.sort$tss_p2c2=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_pseudo")))
+links.p2c2.B <- merge(links.p2c2.B, circos.B[,2:3], by.x="from", by.y="name")
+links.p2c2.B <- merge(links.p2c2.B, circos.B[,2:3], by.x="to", by.y="name")
+links.p2c2.B <- links.p2c2.B[,c(2,1,3,4,5)]
+colnames(links.p2c2.B) <- c("from", "to", "section","x1", "x2")
+links.p2c2.B <- links.p2c2.B[!duplicated(links.p2c2.B),]
+links.p2c2.B$col <- ifelse(links.p2c2.B$section=="Alt_pseudo", cols[4], ifelse(links.p2c2.B$section=="Alt_promoter", cols[3], cols[2]))
+links.p2c2.B$section <- factor(links.p2c2.B$section, levels=c("B_promoter", "Alt_promoter", "Alt_pseudo"))
+links.p2c2.B <- links.p2c2.B[order(links.p2c2.B$section),]
+
+#wt
+links.WT.B <- na.omit(rbind(data.frame(from=B.element.anno.sort[B.element.anno.sort$Bgene_WT=="bgene",]$peakID, to=B.element.anno.sort[B.element.anno.sort$Bgene_WT=="bgene",]$Gene.x, section="B_promoter"), data.frame(from=B.element.anno.sort[B.element.anno.sort$promoter=="Promoter" & B.element.anno.sort$tss_WT=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$peakID, to=B.element.anno.sort[B.element.anno.sort$promoter=="Promoter"&  B.element.anno.sort$tss_WT=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_promoter"), data.frame(from=B.element.anno.sort[B.element.anno.sort$promoter=="Pseudo" & B.element.anno.sort$tss_WT=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$peakID, to=B.element.anno.sort[B.element.anno.sort$promoter=="Pseudo" &  B.element.anno.sort$tss_WT=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_pseudo")))
+links.WT.B <- merge(links.WT.B, circos.B[,2:3], by.x="from", by.y="name")
+links.WT.B <- merge(links.WT.B, circos.B[,2:3], by.x="to", by.y="name")
+links.WT.B <- links.WT.B[,c(2,1,3,4,5)]
+colnames(links.WT.B) <- c("from", "to", "section","x1", "x2")
+links.WT.B <- links.WT.B[!duplicated(links.WT.B),]
+links.WT.B$col <- ifelse(links.WT.B$section=="Alt_pseudo", cols[4], ifelse(links.WT.B$section=="Alt_promoter", cols[3], cols[2]))
+links.WT.B$section <- factor(links.WT.B$section, levels=c("B_promoter", "Alt_promoter", "Alt_pseudo"))
+links.WT.B <- links.WT.B[order(links.WT.B$section),]
+
+#EBf1KO
+links.EKO.B<- na.omit(rbind(data.frame(from=B.element.anno.sort[B.element.anno.sort$Bgene_EKO=="bgene",]$peakID, to=B.element.anno.sort[B.element.anno.sort$Bgene_EKO=="bgene",]$Gene.x, section="B_promoter"), data.frame(from=B.element.anno.sort[B.element.anno.sort$promoter=="Promoter" & B.element.anno.sort$tss_EKO=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$peakID, to=B.element.anno.sort[B.element.anno.sort$promoter=="Promoter" &  B.element.anno.sort$tss_EKO=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_promoter"), data.frame(from=B.element.anno.sort[B.element.anno.sort$promoter=="Pseudo" & B.element.anno.sort$tss_EKO=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$peakID, to=B.element.anno.sort[B.element.anno.sort$promoter=="Pseudo" &  B.element.anno.sort$tss_EKO=="alt" & B.element.anno.sort$ebf1=="Ebf1",]$Gene.y, section="Alt_pseudo")))
+links.EKO.B <- merge(links.EKO.B, circos.B[,2:3], by.x="from", by.y="name")
+links.EKO.B <- merge(links.EKO.B, circos.B[,2:3], by.x="to", by.y="name")
+links.EKO.B <- links.EKO.B[,c(2,1,3,4,5)]
+colnames(links.EKO.B) <- c("from", "to", "section","x1", "x2")
+links.EKO.B <- links.EKO.B[!duplicated(links.EKO.B),]
+links.EKO.B$col <- ifelse(links.EKO.B$section=="Alt_pseudo", cols[4], ifelse(links.EKO.B$section=="Alt_promoter", cols[3], cols[2]))
+links.EKO.B$section <- factor(links.EKO.B$section, levels=c("B_promoter", "Alt_promoter", "Alt_pseudo"))
+links.EKO.B <- links.EKO.B[order(links.EKO.B$section),]
+
+
+##plot
+circos.sum.B <- aggregate(circos.B$x, list(circos.B$section), FUN=mean) 
+circos.sum.B$x.adj <- max(circos.B$x)-circos.sum.B$x+max(circos.B$x)/360*30
+
+#cairo_pdf("output/plots/figure4/Tgene_alternative_promoters_circos.pdf", width = 12, height=6)
+layout(matrix(1:3, 1, 3))
+par(mar = c(0.5, 0.5, 0.5, 0.5))
+
+#p2c2
+circos.clear()
+circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.initialize(circos.B$section, x = circos.B$x)
+circos.track(ylim=c(0,1), bg.col = cols)
+for (i in 1:nrow(links.p2c2.B)){
+  circos.link("B_enhancer", links.p2c2.B[i,"x1"], links.p2c2.B[i,"section"], links.p2c2.B[i,"x2"], lwd=0.2,col = links.p2c2.B[i,"col"])
+}
+
+#Wt
+circos.clear()
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.initialize(circos.B$section, x = circos.B$x)
+circos.track(ylim=c(0,1), bg.col = cols)
+for (i in 1:nrow(links.WT.B)){
+  circos.link("B_enhancer", links.WT.B[i,"x1"], links.WT.B[i,"section"], links.WT.B[i,"x2"], lwd=0.2,  col = links.WT.B[i,"col"])
+}
+
+#Ebf1KO
+circos.clear()
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.initialize(circos.B$section, x = circos.B$x)
+circos.track(ylim=c(0,1), bg.col = cols)
+for (i in 1:nrow(links.EKO.B)){
+  circos.link("B_enhancer", links.EKO.B[i,"x1"], links.EKO.B[i,"section"], links.EKO.B[i,"x2"], lwd=0.2, col = links.EKO.B[i,"col"])
+}
+#dev.off()
+
+length(links.p2c2.B[links.p2c2.B$section=="B_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.WT.B[links.WT.B$section=="B_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.EKO.B[links.EKO.B$section=="B_promoter",]$from)#/length(unique(links.p2c2$from))*100
+
+length(links.p2c2.B[links.p2c2.B$section=="Alt_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.WT.B[links.WT.B$section=="Alt_promoter",]$from)#/length(unique(links.p2c2$from))*100
+length(links.EKO.B[links.EKO.B$section=="Alt_promoter",]$from)#/length(unique(links.p2c2$from))*100
+
+length(links.p2c2.B[links.p2c2.B$section=="Alt_pseudo",]$from)#/length(unique(links.p2c2$from))*100
+length(links.WT.B[links.WT.B$section=="Alt_pseudo",]$from)#/length(unique(links.p2c2$from))*100
+length(links.EKO.B[links.EKO.B$section=="Alt_pseudo",]$from)#/length(unique(links.p2c2$from))*100
+
+```
+
+
+## 4.4 Changes in gene expression at T genes in EKOvsWT
+
+### 4.4.1 Load and organize RNA-seq data from WT/EBf1KO
+```{r}
+rna.norm.WT.EKO <- read.table("data/rna/GSE92434_Analyze-repeats-FL-ProB-WT-EKO-PKO-mm10-count-exons-Condense-genes-with-adjust.txt", header = T, sep = "\t", quote = "", fill = T)
+rna.norm.WT.EKO <- rna.norm.WT.EKO[,c(1,9:14)]
+colnames(rna.norm.WT.EKO) <- c("refseq", "WT_1", "WT_2", "WT_3", "EKO_1", "EKO_2", "EKO_3")
+rna.norm.WT.EKO$entrezID <- mapIds(org.Mm.eg.db, keys=rna.norm.WT.EKO$refseq, column="ENTREZID", keytype="REFSEQ")
+rna.norm.WT.EKO$symbol <- mapIds(org.Mm.eg.db, keys=rna.norm.WT.EKO$refseq, column="SYMBOL", keytype="REFSEQ")
+
+rna.norm.WT.EKO <- rna.norm.WT.EKO[!is.na(rna.norm.WT.EKO$entrezID),]
+rna.norm.WT.EKO <- rna.norm.WT.EKO[,c(1,8,9,2:7)]
+
+#Calculate mean and log2FC
+rna.norm.WT.EKO$WT_mean <- rowMeans(rna.norm.WT.EKO[,4:6])
+rna.norm.WT.EKO$EKO_mean <- rowMeans(rna.norm.WT.EKO[,7:9])
+rna.norm.WT.EKO$log2FC <- log2((rna.norm.WT.EKO$WT_mean+0.1)/(rna.norm.WT.EKO$EKO_mean+0.1))
+```
+
+```{r}
+#Merge alternative annotation with RNA-aeq data
+T.int <- T.element.anno[T.element.anno$Tgene_EKO=="tgene",c(1,7,8,10,16,17,18,19,21,22)]
+
+T.int$alt <- ifelse(!is.na(T.int$Gene.y) & T.int$ebf1=="Ebf1", "Alt_Ebf1", ifelse(!is.na(T.int$Gene.y) & T.int$ebf1!="Ebf1", "Alt", "No_alt"))
+T.int$group1 <- ifelse(T.int$Tgene_WT=="tgene", "Common", "EKO_only")
+T.int$group2 <- ifelse(T.int$tss_EKO=="alt", "Common", "WT_only")
+T.int.ebf1 <- T.int[T.int$alt=="Alt_Ebf1",]
+T.int.ebf1 <- merge(T.int.ebf1, rna.norm.WT.EKO[,c(3,10:12)], by.x="Gene.x", by.y="symbol")
+
+T.int.ebf1 <- T.int.ebf1[,c(1,12,13,14,15,16)]
+T.int.ebf1 <- T.int.ebf1[!duplicated(T.int.ebf1),]
+T.int.ebf1.wide <- gather(T.int.ebf1, celltype, value, WT_mean:EKO_mean, factor_key=TRUE)
+T.int.ebf1.wide$celltype <- factor(T.int.ebf1.wide$celltype, levels=c("EKO_mean", "WT_mean"))
+
+#plot
+source("script/general/r_functions/TG_theme.R")
+my_comparisons <- list( c("WT_mean", "EKO_mean"))
+plot.Tgenes.alt <- ggplot(T.int.ebf1.wide, aes(celltype, log2(value+1)))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() +
+   facet_grid(group2  ~ group1)+
+  ylim(0,17)+
+  TG_theme()+
+stat_compare_means(comparisons = my_comparisons, label="p.signif", label.y = c(14))
+
+ggsave(path="output/plots/figure4", filename="EKOvsWT_Tgenes_alternative_prom_violin.pdf", plot = plot.Tgenes.alt, device = "pdf", dpi=300, height=8, width=5)
+#Violin plot of T genes with EKO interaction to T element, associated with Ebf1 bound alternative promoter (real or pseduo) in WT. log2 norm gene expression of WT/EKO.
+```
+
+
+## 4.5 Generate tracks files for T element interactions
+
+### 4.5.1 Filter interaction
+```{r}
+#Use all interaction for P2C2 and use top 100k interactions for WT/EKO. Filter for interactions with T element in any of the anchor points
+
+#P2C2
+#Load annotated interaction and filter for T element in any anhor point
+int.p2c2.anno <- read.table("output/data/figure2/annotation/atac_230238_p2c2_consensus_peaks_P2C2_H3K4me3_PLAC_annotation/Interaction_annotation/Peak_sepcific_interactions/atac_230238_p2c2_consensus_PLACseq_interactions.txt", header=TRUE, sep="\t")
+int.p2c2.anno <- int.p2c2.anno %>% separate_rows(Peak1_ID, sep = ",")  %>% separate_rows(Peak2_ID, sep = ",")
+int.p2c2.anno.T <- int.p2c2.anno[int.p2c2.anno$Peak1_ID %in% T_elements_anno_iceaP2C2_distal$peakID | int.p2c2.anno$Peak2_ID %in% T_elements_anno_iceaP2C2_distal$peakID,]
+
+#Prepare long-format
+int.p2c2.longrange <- rbind(data.frame(chr=int.p2c2.anno.T$chr1, start=int.p2c2.anno.T$s1, end=int.p2c2.anno.T$e1, loc2=paste0(int.p2c2.anno.T$chr2, ":", int.p2c2.anno.T$s2, "-", int.p2c2.anno.T$e2, ",", -log10(int.p2c2.anno.T$Interaction_score))),data.frame(chr=int.p2c2.anno.T$chr2, start=int.p2c2.anno.T$s2, end=int.p2c2.anno.T$e2, loc2=paste0(int.p2c2.anno.T$chr1, ":", int.p2c2.anno.T$s1, "-", int.p2c2.anno.T$e1, ",", -log10(int.p2c2.anno.T$Interaction_score))))
+int.p2c2.longrange <- int.p2c2.longrange[!duplicated(int.p2c2.longrange),]
+write.table(int.p2c2.longrange, file = "output/data/figure4/interactions/Telement_interactions_p2c2.bed", quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
+
+
+#WT
+#Load annotated interaction and filter for T element in any anhor point
+int.wt.anno <- read.table("output/data/figure4/annotation/Consensus_atac_WTproB_H3K4me3_PLAC_annotation/Interaction_annotation/Peak_sepcific_interactions/atac_230238_p2c2_consensus_PLACseq_interactions.txt", header=TRUE, sep="\t")
+int.wt.anno <- int.wt.anno %>% separate_rows(Peak1_ID, sep = ",")  %>% separate_rows(Peak2_ID, sep = ",")
+int.wt.anno.T <- int.wt.anno[int.wt.anno$Peak1_ID %in% T_elements_anno_iceaP2C2_distal$peakID | int.wt.anno$Peak2_ID %in% T_elements_anno_iceaP2C2_distal$peakID,]
+int.wt.anno.T <- int.wt.anno.T[int.wt.anno.T$Interaction_score <= 10^-(int.wt.cutoff),]
+
+#Prepare long-format
+int.wt.longrange <- rbind(data.frame(chr=int.wt.anno.T$chr1, start=int.wt.anno.T$s1, end=int.wt.anno.T$e1, loc2=paste0(int.wt.anno.T$chr2, ":", int.wt.anno.T$s2, "-", int.wt.anno.T$e2, ",", -log10(int.wt.anno.T$Interaction_score))),data.frame(chr=int.wt.anno.T$chr2, start=int.wt.anno.T$s2, end=int.wt.anno.T$e2, loc2=paste0(int.wt.anno.T$chr1, ":", int.wt.anno.T$s1, "-", int.wt.anno.T$e1, ",", -log10(int.wt.anno.T$Interaction_score))))
+int.wt.longrange <- int.wt.longrange[!duplicated(int.wt.longrange),]
+write.table(int.wt.longrange, file = "output/data/figure4/interactions/Telement_interactions_WT.bed", quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
+
+#EKO
+#Load annotated interaction and filter for T element in any anhor point
+int.eko.anno <- read.table("output/data/figure4/annotation/Consensus_atac_Ebf1KOproB_H3K4me3_PLAC_annotation/Interaction_annotation/Peak_sepcific_interactions/atac_230238_p2c2_consensus_PLACseq_interactions.txt", header=TRUE, sep="\t")
+int.eko.anno <- int.eko.anno %>% separate_rows(Peak1_ID, sep = ",")  %>% separate_rows(Peak2_ID, sep = ",")
+int.eko.anno.T <- int.eko.anno[int.eko.anno$Peak1_ID %in% T_elements_anno_iceaP2C2_distal$peakID | int.eko.anno$Peak2_ID %in% T_elements_anno_iceaP2C2_distal$peakID,]
+
+#Prepare long-format
+int.eko.longrange <- rbind(data.frame(chr=int.eko.anno.T$chr1, start=int.eko.anno.T$s1, end=int.eko.anno.T$e1, loc2=paste0(int.eko.anno.T$chr2, ":", int.eko.anno.T$s2, "-", int.eko.anno.T$e2, ",", -log10(int.eko.anno.T$Interaction_score))),data.frame(chr=int.eko.anno.T$chr2, start=int.eko.anno.T$s2, end=int.eko.anno.T$e2, loc2=paste0(int.eko.anno.T$chr1, ":", int.eko.anno.T$s1, "-", int.eko.anno.T$e1, ",", -log10(int.eko.anno.T$Interaction_score))))
+int.eko.longrange <- int.eko.longrange[!duplicated(int.eko.longrange),]
+write.table(int.eko.longrange, file = "output/data/figure4/interactions/Telement_interactions_EKO.bed", quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
+
+```
+
+
+### 4.5.2 Prepare tracks for washU
+```{bash engine.opts='-l'}
+cd output/data/figure4/interactions/
+
+#p2c2
+sort -k1,1 -k2,2n Telement_interactions_p2c2.bed > Telement_interactions_p2c2_s.bed
+bgzip Telement_interactions_p2c2_s.bed
+tabix -p bed Telement_interactions_p2c2_s.bed.gz
+
+#eko
+sort -k1,1 -k2,2n Telement_interactions_EKO.bed > Telement_interactions_EKO_s.bed
+bgzip Telement_interactions_EKO_s.bed
+tabix -p bed Telement_interactions_EKO_s.bed.gz
+
+#wt
+sort -k1,1 -k2,2n Telement_interactions_WT.bed > Telement_interactions_WT_s.bed
+bgzip Telement_interactions_WT_s.bed
+tabix -p bed Telement_interactions_WT_s.bed.gz
+
+#promoters & pseudopromoters
+sort -k1,1 -k2,2n ../annotation/custom_tss_promoters.bed > custom_tss_promoters_s.bed
+bgzip custom_tss_promoters_s.bed
+tabix -p bed custom_tss_promoters_s.bed.gz
+
+sort -k1,1 -k2,2n ../annotation/custom_tss_pseudopromoters.bed > custom_tss_pseudopromoters_s.bed
+bgzip custom_tss_pseudopromoters_s.bed
+tabix -p bed custom_tss_pseudopromoters_s.bed.gz
+
+#telements
+sort -k1,1 -k2,2n ../T_elements_anno_iceaP2C2_distal.bed > T_elements_anno_iceaP2C2_distal_s.bed
+bgzip T_elements_anno_iceaP2C2_distal_s.bed
+tabix -p bed T_elements_anno_iceaP2C2_distal_s.bed.gz
+```
+
+
+
+
+
+
+
