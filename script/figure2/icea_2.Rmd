@@ -13,7 +13,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/anaconda3/envs/icea_analysis_env/li
 
 Setting working directory
 ```{r setup}
-knitr::opts_knit$set(root.dir = normalizePath("../../"))
+knitr::opts_knit$set(root.dir = normalizePath("/mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/"))
 ```
 
 
@@ -99,12 +99,14 @@ BT.clusters <- lapply(names(BT.cluster.list), function(i){
 }) %>%
 do.call(rbind, .)
 BT.clusters$symbol <-mapIds(org.Mm.eg.db, keys=BT.clusters$entrezID, column="SYMBOL", keytype="ENTREZID")
+BT.clusters$group <- ifelse(BT.clusters$Cluster=="cluster1", "PB", ifelse(BT.clusters$Cluster=="cluster2", "B", ifelse(BT.clusters$Cluster=="cluster3", "PT", "T")))
 
 #Gene lists
 T.genes <- BT.clusters[BT.clusters$Cluster=="cluster4",]
 write.table(T.genes[,3], "output/data/figure2/genelists/Tcell_genes.txt", quote = F, sep = "\t", row.names = F, col.names = F)
 B.genes <- BT.clusters[BT.clusters$Cluster=="cluster2",]
 write.table(B.genes[,3], "output/data/figure2/genelists/Bcell_genes.txt", quote = F, sep = "\t", row.names = F, col.names = F)
+write.table(BT.clusters, "output/data/figure2/genelists/BT_gene_clusters.txt", quote = F, sep = "\t", row.names = F, col.names =T)
 
 ```
 

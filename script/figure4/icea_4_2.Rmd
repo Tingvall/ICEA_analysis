@@ -32,7 +32,6 @@ bash $script_dir/icea_consensus_230238_p2c2_atac_WT_EKO_annotate_interactions.sh
 ## 4.2 Define B/T elements
 
 ### 4.2.1 Identify B/T associated peaks
-
 T elements: distal elements annotated to T gene list in P2C2
 ```{r}
 #Load T genes
@@ -85,6 +84,7 @@ int.p2c2 <-  read.table("data/interactions/P2C2_H3K4me3_FitHiChIP.interactions_F
 int.wt <-  read.table("data/interactions/21_174_175_H3K4me3_FLWT_5kb_ALL2ALL.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t")
 int.eko <-  read.table("data/interactions/13_16_176_177_H3K4me3_FLEKO_5kb_ALL2ALL.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t")
 nint <- min(nrow(int.p2c2), nrow(int.wt), nrow(int.eko))
+#nint <- 100000
 
 int.p2c2 <- int.p2c2[order(int.p2c2$Q.Value_Bias),]
 int.p2c2.top <- int.p2c2[1:nint,]
@@ -351,10 +351,9 @@ colnames(B.element.anno.supp) <- c("peakID", "Chr", "Start", "End", "EntrezID", 
 
 
 
-## 4.3 Circos plot
+## 4.4 Circos plot
 
-### 4.3.1 Filter and organize input
-
+### 4.4.1 Filter and organize input
 Order
 ```{r}
 #T
@@ -424,13 +423,13 @@ links.EKO.T <- links.EKO.T[order(links.EKO.T$section),]
 circos.sum.T <- aggregate(circos.T$x, list(circos.T$section), FUN=mean) 
 circos.sum.T$x.adj <- max(circos.sum.T$x)-circos.sum.T$x+max(circos.T$x)/360*30
 
-#cairo_pdf("output/plots/figure4/Tgene_alternative_promoters_circos.pdf", width = 12, height=6)
+cairo_pdf("output/plots/figure4/Tgene_alternative_promoters_circos_3.pdf", width = 12, height=6)
 layout(matrix(1:3, 1, 3))
 par(mar = c(0.5, 0.5, 0.5, 0.5))
 
 #p2c2
 circos.clear()
-circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=15, gap.degree=c(30, 5,5,30))
 circos.initialize(circos.T$section, x = circos.T$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.p2c2.T)){
@@ -439,7 +438,7 @@ for (i in 1:nrow(links.p2c2.T)){
 
 #Wt
 circos.clear()
-circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=15, gap.degree=c(30, 5,5,30))
 circos.initialize(circos.T$section, x = circos.T$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.WT.T)){
@@ -448,13 +447,13 @@ for (i in 1:nrow(links.WT.T)){
 
 #Ebf1KO
 circos.clear()
-circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=15, gap.degree=c(30, 5,5,30))
 circos.initialize(circos.T$section, x = circos.T$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.EKO.T)){
   circos.link("T_enhancer", links.EKO.T[i,"x1"], links.EKO.T[i,"section"], links.EKO.T[i,"x2"], lwd=0.2, col = links.EKO.T[i,"col"])
 }
-#dev.off()
+dev.off()
 
 length(links.p2c2.T[links.p2c2.T$section=="T_promoter",]$from)#/length(unique(links.p2c2$from))*100
 length(links.WT.T[links.WT.T$section=="T_promoter",]$from)#/length(unique(links.p2c2$from))*100
@@ -471,6 +470,7 @@ length(links.EKO.T[links.EKO.T$section=="Alt_pseudo",]$from)#/length(unique(link
 ```
 
 Plot -B
+OBS: During emrge make sure, interaktions between pseduo/prom are removed (when B element is also T pseudo)
 ```{r}
 #Oranize for circos
 circos.b.enh <- data.frame(section="B_enhancer", name=unique(B.element.anno.sort[order(B.element.anno.sort$Chr.x, B.element.anno.sort$Start.x),]$peakID))
@@ -523,13 +523,13 @@ links.EKO.B <- links.EKO.B[order(links.EKO.B$section),]
 circos.sum.B <- aggregate(circos.B$x, list(circos.B$section), FUN=mean) 
 circos.sum.B$x.adj <- max(circos.B$x)-circos.sum.B$x+max(circos.B$x)/360*30
 
-#cairo_pdf("output/plots/figure4/Tgene_alternative_promoters_circos.pdf", width = 12, height=6)
+cairo_pdf("output/plots/figure4/Bgene_alternative_promoters_circos_3.pdf", width = 12, height=6)
 layout(matrix(1:3, 1, 3))
 par(mar = c(0.5, 0.5, 0.5, 0.5))
 
 #p2c2
 circos.clear()
-circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1, "clock.wise"=F, start.degree=-8, gap.degree=c(30, 5,5,30))
 circos.initialize(circos.B$section, x = circos.B$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.p2c2.B)){
@@ -538,7 +538,7 @@ for (i in 1:nrow(links.p2c2.B)){
 
 #Wt
 circos.clear()
-circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=-8, gap.degree=c(30, 5,5,30))
 circos.initialize(circos.B$section, x = circos.B$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.WT.B)){
@@ -547,13 +547,13 @@ for (i in 1:nrow(links.WT.B)){
 
 #Ebf1KO
 circos.clear()
-circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=25, gap.degree=c(30, 5,5,30))
+circos.par("track.height" = 0.1,"clock.wise"=F, start.degree=-8, gap.degree=c(30, 5,5,30))
 circos.initialize(circos.B$section, x = circos.B$x)
 circos.track(ylim=c(0,1), bg.col = cols)
 for (i in 1:nrow(links.EKO.B)){
   circos.link("B_enhancer", links.EKO.B[i,"x1"], links.EKO.B[i,"section"], links.EKO.B[i,"x2"], lwd=0.2, col = links.EKO.B[i,"col"])
 }
-#dev.off()
+dev.off()
 
 length(links.p2c2.B[links.p2c2.B$section=="B_promoter",]$from)#/length(unique(links.p2c2$from))*100
 length(links.WT.B[links.WT.B$section=="B_promoter",]$from)#/length(unique(links.p2c2$from))*100
@@ -570,9 +570,9 @@ length(links.EKO.B[links.EKO.B$section=="Alt_pseudo",]$from)#/length(unique(link
 ```
 
 
-## 4.4 Changes in gene expression at T genes in EKOvsWT
+## 4.5 Changes in gene expression at B/T genes in EKOvsWT
 
-### 4.4.1 Load and organize RNA-seq data from WT/EBf1KO
+### 4.5.1 Load and organize RNA-seq data from WT/EBf1KO
 ```{r}
 rna.norm.WT.EKO <- read.table("data/rna/GSE92434_Analyze-repeats-FL-ProB-WT-EKO-PKO-mm10-count-exons-Condense-genes-with-adjust.txt", header = T, sep = "\t", quote = "", fill = T)
 rna.norm.WT.EKO <- rna.norm.WT.EKO[,c(1,9:14)]
@@ -589,10 +589,10 @@ rna.norm.WT.EKO$EKO_mean <- rowMeans(rna.norm.WT.EKO[,7:9])
 rna.norm.WT.EKO$log2FC <- log2((rna.norm.WT.EKO$WT_mean+0.1)/(rna.norm.WT.EKO$EKO_mean+0.1))
 ```
 
+### 4.5.2 Merge with interaction data
 ```{r}
-#Merge alternative annotation with RNA-aeq data
+#T
 T.int <- T.element.anno[T.element.anno$Tgene_EKO=="tgene",c(1,7,8,10,16,17,18,19,21,22)]
-
 T.int$alt <- ifelse(!is.na(T.int$Gene.y) & T.int$ebf1=="Ebf1", "Alt_Ebf1", ifelse(!is.na(T.int$Gene.y) & T.int$ebf1!="Ebf1", "Alt", "No_alt"))
 T.int$group1 <- ifelse(T.int$Tgene_WT=="tgene", "Common", "EKO_only")
 T.int$group2 <- ifelse(T.int$tss_EKO=="alt", "Common", "WT_only")
@@ -604,7 +604,26 @@ T.int.ebf1 <- T.int.ebf1[!duplicated(T.int.ebf1),]
 T.int.ebf1.wide <- gather(T.int.ebf1, celltype, value, WT_mean:EKO_mean, factor_key=TRUE)
 T.int.ebf1.wide$celltype <- factor(T.int.ebf1.wide$celltype, levels=c("EKO_mean", "WT_mean"))
 
-#plot
+
+
+
+
+T.int <- T.element.anno[T.element.anno$Tgene_EKO=="tgene",c(1,7,8,10,16,17,18,19,21,22)]
+T.int$alt <- ifelse(!is.na(T.int$Gene.y) & T.int$ebf1=="Ebf1", "Alt_Ebf1", ifelse(!is.na(T.int$Gene.y) & T.int$ebf1!="Ebf1", "Alt", "No_alt"))
+T.int$group1 <- ifelse(T.int$Tgene_WT=="tgene", "Common", "EKO_only")
+T.int$group2 <- ifelse(T.int$tss_EKO=="alt", "Common", "WT_only")
+T.int <- T.int[T.int$tss_WT=="alt",]
+T.int.ebf1 <- merge(T.int, rna.norm.WT.EKO[,c(3,10:12)], by.x="Gene.x", by.y="symbol")
+T.int.ebf1 <- T.int.ebf1[,c(1,12,13,14,15,16)]
+T.int.ebf1 <- T.int.ebf1[!duplicated(T.int.ebf1),]
+T.int.ebf1.wide <- gather(T.int.ebf1, celltype, value, WT_mean:EKO_mean, factor_key=TRUE)
+T.int.ebf1.wide$celltype <- factor(T.int.ebf1.wide$celltype, levels=c("EKO_mean", "WT_mean"))
+
+```
+
+### 4.5.3 Viloin plot
+```{r}
+#T
 source("script/general/r_functions/TG_theme.R")
 my_comparisons <- list( c("WT_mean", "EKO_mean"))
 plot.Tgenes.alt <- ggplot(T.int.ebf1.wide, aes(celltype, log2(value+1)))+
@@ -620,9 +639,9 @@ ggsave(path="output/plots/figure4", filename="EKOvsWT_Tgenes_alternative_prom_vi
 ```
 
 
-## 4.5 Generate tracks files for T element interactions
+## 4.6 Generate tracks files for T element interactions
 
-### 4.5.1 Filter interaction
+### 4.6.1 Filter interaction
 ```{r}
 #Use all interaction for P2C2 and use top 100k interactions for WT/EKO. Filter for interactions with T element in any of the anchor points
 
@@ -664,7 +683,7 @@ write.table(int.eko.longrange, file = "output/data/figure4/interactions/Telement
 ```
 
 
-### 4.5.2 Prepare tracks for washU
+### 4.6.2 Prepare tracks for washU
 ```{bash engine.opts='-l'}
 cd output/data/figure4/interactions/
 
