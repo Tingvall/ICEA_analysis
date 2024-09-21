@@ -328,6 +328,24 @@ venn_gene_t+venn_int_t+venn_alt_t+venn_gene_b+venn_int_b+venn_alt_b
 dev.off()
 ```
 
+### 4.5.2 Conservation plot
+```{r}
+#Create data frame of percentage conserved interactions 
+
+#T-DRE
+DRE_cons <- data.frame(celltype=rep(c("L", "EKO"),4), cat=rep(c("LSP", "UP"), each=2, times=2), lineage=rep(c("T", "B"), each=4), count=c(377, 595, 1274, 1389, 575, 508, 2037, 2248), fraction=c(377/1186*100, 595/1186*100, 1274/2217*100, 1389/2217*100, 575/2198*100, 1011/2198*100, 2037/3854*100, 2248/3854*100))
+DRE_cons$celltype <- factor(DRE_cons$celltype, levels=c("L", "EKO"))
+DRE_cons$lineage <- factor(DRE_cons$lineage, levels=c("T", "B"))
+
+
+DRE_conservation_plot <- ggplot(data=DRE_cons, aes(x=celltype, y=fraction, fill=lineage)) +
+  geom_bar(stat="identity",width=0.75)+
+  facet_wrap(cat~lineage)+TG_theme(aspect.ratio = 8)+
+  scale_fill_manual(values=c("#20446c", "#632a54"))+
+  scale_y_continuous(expand = c(0, 0))
+
+ggsave(path="output/plots/figure4/", filename="DRE_conservation_plot.pdf", plot = DRE_conservation_plot, device = "pdf", dpi=300, height=12, width=8)
+```
 
 
 ## 4.6 Generate tracks files for B/T element interactions
