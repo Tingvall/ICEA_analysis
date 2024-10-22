@@ -413,6 +413,8 @@ Enh.Prom.pairs.sig.summary.gene.dist <- Enh.Prom.pairs.sig.summary.gene.dist[Enh
 
 Dotplot
 ```{r}
+test <-colorRamp2(c(0.2,1), c( "#8b5b17" ,"black"))
+test(0.8)
 Gene.plot <- ggplot(Enh.Prom.pairs.sig.summary.gene.dist,aes(x=method,y=Gene)) +geom_point(aes(size=n,color=Percent))+
   scale_size(range = c(1,6))+
   TG_theme()+

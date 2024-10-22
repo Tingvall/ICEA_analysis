@@ -16,3 +16,9 @@
 
 #Exclude nextflow logs
 /.nextflow.log*
+
+#Exlude GEO submission data
+/ICEA_geo_submission_241020
+
+#Xclude old code
+/script/old_code
