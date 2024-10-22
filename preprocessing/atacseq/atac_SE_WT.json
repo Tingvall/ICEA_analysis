@@ -1,0 +1,30 @@
+{
+    "atac.title" : "240331_WT_ATACseq",
+    "atac.description" : "WT FL proB ATAC-seq analysis",
+
+    "atac.pipeline_type" : "atac",
+    "atac.align_only" : false,
+    "atac.true_rep_only" : false,
+
+    "atac.genome_tsv" : "/mnt/data/bioinfo_tools_and_refs/bioinfo_tools/atac-seq-pipeline/genome_files/mm10/mm10.tsv",
+    "atac.genome_name" : "mm10",
+    "atac.paired_end" : false,
+
+    "atac.fastqs_rep1_R1" : [ "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/1ProBWt1-ATAC1-29021009/W1_S1_L001_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/1ProBWt1-ATAC1-29021009/W1_S1_L002_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/1ProBWt1-ATAC1-29021009/W1_S1_L003_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/1ProBWt1-ATAC1-29021009/W1_S1_L004_R1_001.fastq.gz" ],
+    "atac.fastqs_rep2_R1" : [ "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/2ProBWt2-ATAC2-29469562/2ProBWt2-ATAC2_S1_L001_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/2ProBWt2-ATAC2-29469562/2ProBWt2-ATAC2_S1_L002_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/2ProBWt2-ATAC2-29469562/2ProBWt2-ATAC2_S1_L003_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/2ProBWt2-ATAC2-29469562/2ProBWt2-ATAC2_S1_L004_R1_001.fastq.gz" ],
+    "atac.fastqs_rep3_R1" : [ "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/3ProBWt3-ATAC3-29486525/3ProBWt3-ATAC3_S2_L001_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/3ProBWt3-ATAC3-29486525/3ProBWt3-ATAC3_S2_L002_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/3ProBWt3-ATAC3-29486525/3ProBWt3-ATAC3_S2_L003_R1_001.fastq.gz", "/mnt/data/common/tobias/ATAC-seq/ATAC-FL-ProB-WT-EKO-PKO-GSE92434/FL-ProB/3ProBWt3-ATAC3-29486525/3ProBWt3-ATAC3_S2_L004_R1_001.fastq.gz" ],
+
+    "atac.auto_detect_adapter" : true,
+    "atac.multimapping" : 4,
+
+    "atac.mapq_thresh" : 30,
+    "atac.dup_marker" : "picard",
+    "atac.no_dup_removal" : true,
+
+    "atac.enable_idr" : true,
+    "atac.idr_thresh" : 0.05,
+
+    "atac.enable_count_signal_track" : true,
+
+    "atac.filter_chrs" : ["chrM", "MT"]
+}

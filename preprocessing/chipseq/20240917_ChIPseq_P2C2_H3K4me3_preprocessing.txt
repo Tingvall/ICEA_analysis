@@ -1,0 +1,92 @@
+#! /bin/bash
+# Preprocessing of chipseq data, trimming with trim_galore 0.6.7, mapping with bowtie2 2.4.4, processing with samtools v 1.9, (duplicate removal with Picard), making bigwigs with deeptools (v3.5.1)
+#set -ueo #Exit immediately if a simple command exits with a non-zero status#
+
+path_fastq="/mnt/data/common/tobias/tg/chipseq/reanalysis/p2c2/fastq/"
+path_processed="/mnt/data/common/tobias/tg/chipseq/reanalysis/p2c2/preprocessing/"
+bowtie2_mm10_idx="/mnt/data/bioinfo_tools_and_refs/refs/index/bowtie2/mm10.GRCm38.p5_gencode"
+ref_gen="mm10"
+threads=24
+genome_size=2652783500 #mm10 genome size non-N bases
+
+samples="ChIPseq_P2C2_H3K4me3_rep1 ChIPseq_P2C2_H3K4me3_rep2 ChIPseq_P2C2_H3K4me3_input"
+
+for i in ${samples}; do
+
+        #Checking if directory to fastq files exist
+        fastq_dir=${path_fastq}${i}
+        echo "Directory to fastq files: ${fastq_dir}"
+        #Check if directory exists
+        [ -d ${fastq_dir} ] && echo "${fastq_dir} exists."
+        [ -d ${fastq_dir} ] || echo "${fastq_dir} DOES NOT exist."
+        [ -d ${fastq_dir} ] || exit
+
+        #Creating directory for processed files
+        mkdir -p ${path_processed}${i}
+        processed_dir=${path_processed}${i}
+
+        #Cat and move the files.
+        gunzip -c ${fastq_dir}/*fastq.gz > ${processed_dir}/${i}.R1.fastq
+	cd ${processed_dir}
+
+	#Run fastqc on untrimmed files.
+	fastqc ${i}.R1.fastq
+
+	#Trim fastq files. Short trimming from the 38 bp reads.
+        echo "trim_galore --gzip --fastqc --clip_R1 5 --three_prime_clip_R1 3 ${i}.R1.fastq"
+	trim_galore --gzip --fastqc --clip_R1 5 --three_prime_clip_R1 3 ${i}.R1.fastq
+
+	#Bowtie2 map trimmed fastq-file against mm10.
+	echo "bowtie2 -x ${bowtie2_mm10_idx} -p ${threads} -U ${i}_trimmed.fq.gz | samtools view -@ ${threads} -bS - > ${i}.bam 2>>  ${i}.bowtie2_stats.log"
+	bowtie2 -x ${bowtie2_mm10_idx} -p ${threads} -U ${i}.R1_trimmed.fq.gz | samtools view -@ ${threads} -bS - > ${i}.bam 2>>  ${i}.bowtie2_stats.log
+
+	#Sort and index the bam-file
+	echo "samtools sort -@ ${threads} -o ${i}.s.bam ${i}.bam"
+	samtools sort -@ ${threads} -o ${i}.s.bam ${i}.bam
+	echo "samtools index ${i}.s.bam"
+	samtools index ${i}.s.bam
+	#Print indexing stats
+	echo "Print indexing stats!"
+	samtools idxstats ${i}.s.bam > ${i}.s.bam.idxstats.txt
+
+	#Remove chrM and additional "junk" chromosomes
+	echo "Removing chrM and additional junk chromosomes!"
+	echo "samtools view -@ ${threads} -b ${i}.s.bam chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chrX chrY > ${i}.s.no_MT.bam"
+	samtools view -@ ${threads} -b ${i}.s.bam chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 chr11 chr12 chr13 chr14 chr15 chr16 chr17 chr18 chr19 chrX chrY > ${i}.s.no_MT.bam
+
+	#Index the new bam file
+	echo "samtools index -@ ${threads} ${i}.s.no_MT.bam"
+	samtools index -@ ${threads} ${i}.s.no_MT.bam
+	rm ${i}.bam ${i}.s.bam
+
+	#Filter the output for a q-value of 30
+	samtools view -@ ${threads} -b -q 30 ${i}.s.no_MT.bam > ${i}.q30.bam
+
+	#Sort and index the file
+	samtools sort -@ ${threads} -o ${i}.q30.s.bam ${i}.q30.bam
+	samtools index ${i}.q30.s.bam
+
+	#Write the new idxstats to file
+        samtools idxstats ${i}.q30.s.bam > ${i}.q30.idxstats.txt
+
+	#Creating directories
+	mkdir -p ${i}.for_genome_browser ${i}.pre_processed_files ${i}.fastQC
+
+	#Create bigwig with deeptools
+	echo "Creating bigwigs with deeptools."
+	echo "bamCoverage -b ${i}.q30.s.bam --effectiveGenomeSize ${genome_size} --normalizeUsing RPGC --centerReads -o ${i}.for_genome_browser/${i}.q30.bw"
+	bamCoverage -b ${i}.q30.s.bam -p ${threads} --effectiveGenomeSize ${genome_size} --normalizeUsing RPGC --centerReads -o ${i}.for_genome_browser/${i}.q30.bw
+
+	#Clean up
+	echo "Cleaning up!"
+	mv ${i}.q30.s.ba* ${i}.pre_processed_files
+	mv *fastqc* ${i}.fastQC
+	rm *.bam *.bai *.fq.gz *fastq
+
+	#Link browser track
+	#ln -s ${processed_dir}/${i}.${ref_gen}.bowtie2/${i}.for_genome_browser/${i}.q30.bw /var/www/html/TG_bws/GSE140975_Pax5KO/${i}.q30.bw
+
+done
+
+
+
