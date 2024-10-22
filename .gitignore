@@ -20,5 +20,6 @@
 #Exlude GEO submission data
 /ICEA_geo_submission_241020
 
-#Exclude old code
+#Exclude old code and plots
 /script/old_code
+/output/plots/old_plots
