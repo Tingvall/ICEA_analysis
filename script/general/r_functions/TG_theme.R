@@ -35,8 +35,8 @@ TG_theme <- function(base_size = 12,
         margin=margin(0,0,10,10)),
       strip.background = element_rect(
         fill=NA, color=NA),
-      #axis.ticks.x=element_blank(),
-      #axis.text.x = element_blank(),
+      axis.ticks.x=element_line(color="Black"),
+      axis.ticks.y=element_line(color="Black"),
       plot.margin = margin(0.2, 0.2, 1, 0.2, "cm"),
       legend.title = element_blank(),
       legend.text = element_text(
