@@ -30,10 +30,10 @@ lapply(packages, library, character.only = TRUE)
 ### 2.1.1 Differntial genes FrBC vs DN2b
 ```{r}
 #Import Immgen RNAseq data (preprocessed with: rnaseq_star_rsem_PE_sample_processing.skript)
-files.rna.immgen <- list.files(path = "data/rna/immgen/counts", pattern = "genes.results$", full.names = T)
-names(files.rna.immgen) <- sub(".Aligned.toTranscriptome.rsem.out.genes.results", "",list.files(path = "data/rna/immgen/counts", pattern = "genes.results$"))
-names(files.rna.immgen) <- c(names(files.rna.immgen[1:15]), "LTHSC_34neg_1", "LTHSC_34neg_2", "LTHSC_34pos_1", "LTHSC_34pos_2", names(files.rna.immgen[20:23]))
-files.rna.immgen <- files.rna.immgen[c(16:19, 22:23, 20:21, 1:2, 10:15, 3:9)]
+files.rna.immgen <- list.files(path = "/mnt/data/common/tobias/tg/rnaseq/Immgen/counts", pattern = "genes.results$", full.names = T)
+names(files.rna.immgen) <- sub(".Aligned.toTranscriptome.rsem.out.genes.results", "",list.files(path = "/mnt/data/common/tobias/tg/rnaseq/Immgen/counts", pattern = "genes.results$"))
+names(files.rna.immgen) <- c(names(files.rna.immgen[1:17]), "LTHSC_34neg_1", "LTHSC_34neg_2", "LTHSC_34pos_1", "LTHSC_34pos_2", names(files.rna.immgen[22:25]))
+files.rna.immgen <- files.rna.immgen[c(18:21, 24:25, 22:23, 1:2, 10:17, 3:9)]
 txi.rna.rna.immgen <- tximport(files.rna.immgen, type="rsem", txIn = F, txOut = F, importer = read.delim)
 
 #Convert to entrezID & filter
@@ -46,18 +46,18 @@ counts.rna.immgen <- round(counts.rna.immgen, 0)
 counts.rna.immgen <- counts.rna.immgen[rowSums(counts.rna.immgen >= 10) >= 2,]
 
 #Create coldata
-coldata.rna.immgen <- data.frame(sampleID=colnames(counts.rna.immgen), celltype=c(rep(c("LTHSC_34neg","LTHSC_34pos","STHSC","MPP4","CLP","FrA","FrBC", "FrE", "DN1"),each=2),"DN2a", rep(c("DN2b", "DN3"), each=2)), replicate=c(rep(c(1,2), 9), 1, 1,2,1,2))
-coldata.rna.immgen$celltype <- factor(coldata.rna.immgen$celltype, levels = c("LTHSC_34neg","LTHSC_34pos","STHSC","MPP4","CLP","FrA","FrBC", "FrE", "DN1","DN2a", "DN2b", "DN3"))
+coldata.rna.immgen <- data.frame(sampleID=colnames(counts.rna.immgen), celltype=c(rep(c("LTHSC_34neg","LTHSC_34pos","STHSC","MPP4","CLP","FrA","FrBC", "FrD","FrE", "DN1"),each=2),"DN2a", rep(c("DN2b", "DN3"), each=2)), replicate=c(rep(c(1,2), 10), 1, 1,2,1,2))
+coldata.rna.immgen$celltype <- factor(coldata.rna.immgen$celltype, levels = c("LTHSC_34neg","LTHSC_34pos","STHSC","MPP4","CLP","FrA","FrBC", "FrD","FrE", "DN1","DN2a", "DN2b", "DN3"))
 
 #Save data
-save(counts.rna.immgen, file="output/rdata/figure2/counts.rna.immgen.Rdata")
-load(file="output/rdata/figure2/counts.rna.immgen.Rdata")
-save(coldata.rna.immgen, file="output/rdata/figure2/coldata.rna.immgen.Rdata")
-load(file="output/rdata/figure2/coldata.rna.immgen.Rdata")
+#save(counts.rna.immgen, file="output/rdata/figure2/counts.rna.immgen.Rdata")
+#load(file="output/rdata/figure2/counts.rna.immgen.Rdata")
+#save(coldata.rna.immgen, file="output/rdata/figure2/coldata.rna.immgen.Rdata")
+#load(file="output/rdata/figure2/coldata.rna.immgen.Rdata")
 
 #Identify differntially expressed genes between FrBC and DN2b
 source("script/general/r_functions/DESeq2_fun.R")
-DESeq2_fun(counts = counts.rna.immgen, coldata = coldata.rna.immgen, selection = c(13,14,20,21), factor="celltype", groups = c("DN2b", "FrBC"), filt=T, filt_n = 2, filt_value = 10, mapID = T, orgdb = org.Mm.eg.db)
+DESeq2_fun(counts = counts.rna.immgen, coldata = coldata.rna.immgen, selection = c(13,14,22,23), factor="celltype", groups = c("DN2b", "FrBC"), filt=T, filt_n = 2, filt_value = 10, mapID = T, orgdb = org.Mm.eg.db)
 DE.FrBCvsDN2b.result.diff <- DE.FrBCvsDN2b.result.df[abs(DE.FrBCvsDN2b.result.df$log2FoldChange)> 2 & !is.na(DE.FrBCvsDN2b.result.df$padj) & DE.FrBCvsDN2b.result.df$padj<0.01,]
 ```
 
@@ -69,13 +69,17 @@ dds.rna.immgen <- DESeq(dds.rna.immgen)
 vst.rna.immgen <- vst(dds.rna.immgen)
 vst.rna.immgen.df <- data.frame(assay(vst.rna.immgen))
 
-vst.rna.immgen.mean <- data.frame(LTHSC_34neg=rowMeans(vst.rna.immgen.df[,1:2]), LTHSC_34pos=rowMeans(vst.rna.immgen.df[,3:4]), STHSC=rowMeans(vst.rna.immgen.df[,5:6]), MPP4=rowMeans(vst.rna.immgen.df[,7:8]),CLP=rowMeans(vst.rna.immgen.df[,9:10]),FrA=rowMeans(vst.rna.immgen.df[,11:12]), FrBC=rowMeans(vst.rna.immgen.df[,13:14]), FrE=rowMeans(vst.rna.immgen.df[,15:16]), DN1=rowMeans(vst.rna.immgen.df[,17:18]),DN2a=vst.rna.immgen.df[,19], DN2b=rowMeans(vst.rna.immgen.df[,20:21]), DN3=rowMeans(vst.rna.immgen.df[,22:23]))
+vst.rna.immgen.mean <- data.frame(LTHSC_34neg=rowMeans(vst.rna.immgen.df[,1:2]), LTHSC_34pos=rowMeans(vst.rna.immgen.df[,3:4]), STHSC=rowMeans(vst.rna.immgen.df[,5:6]), MPP4=rowMeans(vst.rna.immgen.df[,7:8]),CLP=rowMeans(vst.rna.immgen.df[,9:10]),FrA=rowMeans(vst.rna.immgen.df[,11:12]), FrBC=rowMeans(vst.rna.immgen.df[,13:14]), FrD=rowMeans(vst.rna.immgen.df[,15:16]), FrE=rowMeans(vst.rna.immgen.df[,17:18]), DN1=rowMeans(vst.rna.immgen.df[,19:20]),DN2a=vst.rna.immgen.df[,21], DN2b=rowMeans(vst.rna.immgen.df[,22:23]), DN3=rowMeans(vst.rna.immgen.df[,24:25]))
+vst.rna.immgen.z <- as.data.frame(vst.rna.immgen.mean-rowMeans(vst.rna.immgen.mean))/rowSds(as.matrix(vst.rna.immgen.mean))
+vst.rna.immgen.mean <- data.frame(LTHSC_34neg=rowMeans(vst.rna.immgen.df[,1:2]), LTHSC_34pos=rowMeans(vst.rna.immgen.df[,3:4]), STHSC=rowMeans(vst.rna.immgen.df[,5:6]), MPP4=rowMeans(vst.rna.immgen.df[,7:8]),CLP=rowMeans(vst.rna.immgen.df[,9:10]),FrA=rowMeans(vst.rna.immgen.df[,11:12]), FrBC=rowMeans(vst.rna.immgen.df[,13:14]), FrE=rowMeans(vst.rna.immgen.df[,17:18]), DN1=rowMeans(vst.rna.immgen.df[,19:20]),DN2a=vst.rna.immgen.df[,21], DN2b=rowMeans(vst.rna.immgen.df[,22:23]), DN3=rowMeans(vst.rna.immgen.df[,24:25]))
 vst.rna.immgen.z <- as.data.frame(vst.rna.immgen.mean-rowMeans(vst.rna.immgen.mean))/rowSds(as.matrix(vst.rna.immgen.mean))
 vst.rna.immgen.z <- na.omit(vst.rna.immgen.z)
-save(vst.rna.immgen.z, file="output/rdata/figure2/vst.rna.immgen.z.Rdata")
+
+
+#save(vst.rna.immgen.z, file="output/rdata/figure2/vst.rna.immgen.z.Rdata")
 vst.rna.immgen.z.BT <- vst.rna.immgen.z[rownames(vst.rna.immgen.z) %in% DE.FrBCvsDN2b.result.diff$row, ]
 
-groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",4), rep( "T cell progenitors",4))
+groups = c(rep("Common progenitors", 4), rep( "B cell progenitors",5), rep( "T cell progenitors",4))
 groups <- factor(groups, levels = c( "Common progenitors", "T cell progenitors", "B cell progenitors"))
 set.seed(12)
 col <- colorRamp2(c(-3.5, -1.75, 0, 1.75, 3.5),colors = c("#1f426a", "#8f9bb2", "white", "#b58ea7", "#6a2456"))
@@ -84,9 +88,9 @@ BT.heatmap <- Heatmap(vst.rna.immgen.z.BT, col=col, name="BT", row_km = 4, show_
 set.seed(4)
 BT.heatmap <-draw(BT.heatmap, main_heatmap = "BT", heatmap_width = unit(12, "cm"), heatmap_height = unit(8, "cm")) 
 
-cairo_pdf("output/plots/figure2/B_T_genes_heatmap.pdf")
-BT.heatmap
-dev.off()
+#cairo_pdf("output/plots/figure2/B_T_genes_heatmap.pdf")
+#BT.heatmap
+#dev.off()
 
 #Extracting clusters
 BT.cluster.list <- row_order(BT.heatmap) 

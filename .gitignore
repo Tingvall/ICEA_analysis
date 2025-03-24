@@ -8,6 +8,7 @@
 
 #Exclude tmp directory
 /tmp
+/script/eQTL
 
 #Exlude RData etc
 /.RData
@@ -16,6 +17,7 @@
 
 #Exclude nextflow logs
 /.nextflow.log*
+/.nextflow
 
 #Exlude GEO submission data
 /ICEA_geo_submission_241020

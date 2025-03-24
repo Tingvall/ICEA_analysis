@@ -12,7 +12,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/anaconda3/envs/icea_analysis_env/li
 
 Setting working directory
 ```{r setup}
-knitr::opts_knit$set(root.dir = normalizePath("../../"))
+knitr::opts_knit$set(root.dir = normalizePath("/mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/"))
 ```
 
 
@@ -428,9 +428,204 @@ ggsave(path="output/plots/figure1", filename="K562_enhancer_annotation_gene_base
 
 ```
 
-
-## 1.3.5 Example of situation where only interaction-based annotation identify elements 
+### 1.3.5 Example of situation where only interaction-based annotation identify elements 
 Browser track of the Gata1 locus
 
 
+
+## 1.4 Benchmarking: Cancer enhancers
+
+### 1.4.1 Custom promoters
+```{r}
+#Load custom promoter regions
+hg38.promoters <- read.table("data/other/tss/GREATv4.genes.hg38.tsv", header=F, sep="\t", quote = "")
+colnames(hg38.promoters) <- c("ensembl", "chr", "tss", "strand", "symbol")
+hg38.promoters$start <-hg38.promoters$tss-2500
+hg38.promoters$end <-hg38.promoters$tss+2500
+hg38.promoters$strand <- ifelse(hg38.promoters$strand=="+", 0, 1)
+
+hg38.promoters.f <- hg38.promoters[,c(5,2,6,7,4)]
+write.table(hg38.promoters.f, "output/data/figure1/cancer_enhancers/hg38_tss_2500.txt", quote = F, sep = "\t", row.names = F, col.names = F)
+```
+
+### 1.4.2 Load data
+```{r}
+#Enahncers
+enh.val <-  data.frame(read_xlsx(path = "data/other/cancer_enhancers/essential_enhancers.xlsx", sheet = 6, skip = 1))
+enh.val$peakID <- paste0(enh.val$chr, ":", enh.val$start, "-", enh.val$end)
+enh.val <-unique(enh.val[,c(2,3,4,11)])
+write.table(enh.val, "output/data/figure1/cancer_enhancers/enh.bed", sep="\t", quote = F, col.names = F, row.names = F)
+
+#Essential genes
+genes <-  data.frame(read_xlsx(path = "data/other/cancer_enhancers/essential_genes.xlsx", sheet = 1))[,1:2]
+colnames(genes) <- c("id", "type")
+genes <- genes[genes$type=="POS_HCT_GECKO",]
+genes$id <- sub("_.*", "", genes$id)
+genes <- unique(genes)
+
+#filter (within 2MB from enh)
+genes.f <-hg38.promoters[hg38.promoters$symbol %in% genes$id,]
+genes.f$reg_start <- genes.f$tss-2000000
+genes.f$reg_end <- genes.f$tss+2000000
+genes.f[genes.f$reg_start<0,]$reg_start <- 0
+write.table(genes.f[,c(2,8,9)], "output/data/figure1/cancer_enhancers/gene_reg.bed", sep="\t", quote = F, col.names = F, row.names = F)
+
+#Interactions
+int.a549.1 <- read.table(file="data/other/cancer_enhancers/GSE161873_format_A549wtr1.10k.2.peaks.bedpe.txt", header = F, sep = "\t", fill = T)[,1:4]
+colnames(int.a549.1) <- c("chr1", "s1", "e1", "loc2")
+int.a549.1 <-  int.a549.1 %>% separate(loc2, c("chr2", "s2", "e2", "score"), ":|-|,", convert=T)
+
+int.a549.2 <- read.table(file="data/other/cancer_enhancers/GSE161873_format_A549wtr2.10k.2.peaks.bedpe.txt", header = F, sep = "\t", fill = T)[,1:4]
+colnames(int.a549.2) <- c("chr1", "s1", "e1", "loc2")
+int.a549.2 <-  int.a549.2 %>% separate(loc2, c("chr2", "s2", "e2", "score"), ":|-|,", convert=T)
+
+int.a549 <- rbind(int.a549.1, int.a549.2)
+int.a549 <- int.a549[order(int.a549$score, decreasing = T),]
+int.a549 <- int.a549[!duplicated(int.a549[,1:6]),]
+write.table(int.a549, "output/data/figure1/cancer_enhancers/int_A549.bed", sep="\t", quote = F, col.names = T, row.names = F)
+
+int.hct <- read.table(file="data/other/cancer_enhancers/GSE161873_format_HCT116wt.10k.2.peaks.bedpe.txt", header = F, sep = "\t", fill = T)[,1:4]
+colnames(int.hct) <- c("chr1", "s1", "e1", "loc2")
+int.hct <-  int.hct %>% separate(loc2, c("chr2", "s2", "e2", "score"), ":|-|,", convert=T)
+int.hct <- int.hct[order(int.hct$score, decreasing = T),]
+int.hct <- int.hct[1:nrow(int.a549),]
+write.table(int.hct, "output/data/figure1/cancer_enhancers/int_HCT116.bed", sep="\t", quote = F, col.names = T, row.names = F)
+```
+
+### 1.4.3 Filer enhancers for close gene
+```{bash engine.opts='-l'}
+cd output/data/figure1/cancer_enhancers/
+bash /mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/script/general/bedtools_intersect_wa.sh enh.bed gene_reg.bed enh_f.bed
+```
+
+```{r}
+enh_f_o <- read.table(file="output/data/figure1/cancer_enhancers/enh_f.bed", header = F, sep = "\t", fill = T)
+enh_f_o <- unique(enh_f_o)
+write.table(enh_f_o, "output/data/figure1/cancer_enhancers/enh_f.bed", sep="\t", quote = F, col.names = F, row.names = F)
+```
+
+### 1.4.4 Annotation
+
+ICE-A annotation
+```{bash engine.opts='-l'}
+script_dir="script/figure1"
+bash $script_dir/icea_cancer_enh.sh
+```
+
+```{r}
+enh.anno.hct <- read.table(file="output/data/figure1/cancer_enhancers/enh_anno_HCT116/Peak_annotation/enh/enh_PLACseq_annotated.txt", header = T, sep = "\t", fill = T)
+enh.anno.hct$peakID <- paste0(enh.anno.hct$Chr,":", enh.anno.hct$Start,"-",enh.anno.hct$End)
+enh.anno.hct <- enh.anno.hct[,c(17, 9, 5, 10,13, 14)]
+enh.anno.hct$id <- paste0(enh.anno.hct$peakID, "_", enh.anno.hct$Gene)
+enh.anno.hct <- enh.anno.hct[!(enh.anno.hct$Peak_type=="Promoter" & enh.anno.hct$Annotation_method=="Interaction_anno"),]
+enh.anno.hct <- enh.anno.hct[order(enh.anno.hct$Interaction_score),]
+enh.anno.hct <- enh.anno.hct[!duplicated(enh.anno.hct$id),]
+
+enh.anno.hct.int <- read.table(file="output/data/figure1/cancer_enhancers/enh_anno_HCT116_overlap/Peak_annotation/enh/enh_PLACseq_annotated.txt", header = T, sep = "\t", fill = T)
+enh.anno.hct.int$peakID <- paste0(enh.anno.hct.int$Chr,":", enh.anno.hct.int$Start,"-",enh.anno.hct.int$End)
+enh.anno.hct.int <- enh.anno.hct.int[enh.anno.hct.int$Annotation_method=="Interaction_anno",]
+enh.anno.hct.int <- enh.anno.hct.int[,c(17, 9, 5, 10,13, 14)]
+enh.anno.hct.int$id <- paste0(enh.anno.hct.int$peakID, "_", enh.anno.hct.int$Gene)
+enh.anno.hct.int <- enh.anno.hct.int[order(enh.anno.hct.int$Interaction_score),]
+enh.anno.hct.int <- enh.anno.hct.int[!duplicated(enh.anno.hct.int$id),]
+
+enh.anno.a549 <- read.table(file="output/data/figure1/cancer_enhancers/enh_anno_A549/Peak_annotation/enh/enh_PLACseq_annotated.txt", header = T, sep = "\t", fill = T)
+enh.anno.a549$peakID <- paste0(enh.anno.a549$Chr,":", enh.anno.a549$Start,"-",enh.anno.a549$End)
+enh.anno.a549 <- enh.anno.a549[,c(17, 9, 5, 10,13, 14)]
+enh.anno.a549$id <- paste0(enh.anno.a549$peakID, "_", enh.anno.a549$Gene)
+enh.anno.a549 <- enh.anno.a549[!(enh.anno.a549$Peak_type=="Promoter" & enh.anno.a549$Annotation_method=="Interaction_anno"),]
+enh.anno.a549 <- enh.anno.a549[order(enh.anno.a549$Interaction_score),]
+enh.anno.a549 <- enh.anno.a549[!duplicated(enh.anno.a549$id),]
+```
+
+HOMER proximity annotation 
+```{bash engine.opts='-l'}
+cd output/data/figure1/cancer_enhancers
+
+awk -v FS='\t' -v OFS='\t' '{print $2,"custom","exon",$3,$4,".",$5,".","transcript_id ""\x22"$1"\x22"}' hg38_tss_2500.txt > hg38_tss_2500.gtf
+
+annotatePeaks.pl enh_f.bed hg38 -gtf hg38_tss_2500.gtf > enh_anno_prox.txt
+awk -v FS='\t' -v OFS='\t' '{print $1, $16, $10}' enh_anno_prox.txt > enh_anno_prox_cut.txt
+```
+
+```{r}
+enh.anno.p <- read.table("output/data/figure1/cancer_enhancers/enh_anno_prox_cut.txt", header=TRUE, sep="\t", quote="")
+names(enh.anno.p)[1] <- 'peakID'
+enh.anno.p <- enh.anno.p[!is.na(enh.anno.p),]
+enh.anno.p$id <- paste0(enh.anno.p$peakID, "_", enh.anno.p$Gene)
+enh.anno.p <- enh.anno.p[!duplicated(enh.anno.p$id),]
+```
+
+GREAT annotation
+```{r}
+enh.anno.great <- read.table("output/data/figure1/cancer_enhancers/enh_anno_great.txt", header=F, sep="\t", quote="")
+colnames(enh.anno.great) <- c("peakID", "Gene")
+enh.anno.great <- mutate(enh.anno.great,Gene = strsplit(Gene, ", ")) %>% unnest(Gene) %>% separate(Gene, c('Gene', 'DistanceTSS'), sep=" \\(")
+enh.anno.great$DistanceTSS <- str_replace(enh.anno.great$DistanceTSS,
+                        pattern = "\\)",
+                        replacement = "")
+enh.anno.great$DistanceTSS <- as.numeric(enh.anno.great$DistanceTSS)
+enh.anno.great$id <- paste0(enh.anno.great$peakID, "_", enh.anno.great$Gene)
+enh.anno.great <- data.frame(enh.anno.great[!duplicated(enh.anno.great$id),])
+```
+
+
+###  1.4.5 Stats
+```{r}
+#Prox
+enh.prox <- enh.anno.p
+enh.prox$ess <- ifelse(enh.prox$Gene %in% genes$id,1,0)
+
+#great
+enh.great <- enh.anno.great
+enh.great$ess <- ifelse(enh.great$Gene %in% genes$id,1,0)
+
+#icea - A548 - def
+enh.anno.a549.def <- enh.anno.a549[!(enh.anno.a549$Peak_type=="Distal" & enh.anno.a549$Annotation_method=="Proximal_anno"), ]
+enh.anno.a549.def$ess <- ifelse(enh.anno.a549.def$Gene %in% genes$id,1,0)
+
+#icea - HCT - def
+enh.anno.hct.def <- enh.anno.hct[!(enh.anno.hct$Peak_type=="Distal" & enh.anno.hct$Annotation_method=="Proximal_anno"), ]
+enh.anno.hct.def$ess <- ifelse(enh.anno.hct.def$Gene %in% genes$id,1,0)
+
+#icea - HCT only interactions
+enh.anno.hct.intonly <- enh.anno.hct.int
+enh.anno.hct.intonly$ess <- ifelse(enh.anno.hct.intonly$Gene %in% genes$id,1,0)
+
+#icea - HCT - unannotated
+#enh.hct.unanno <- enh.anno.hct
+#enh.hct.unanno$ess <- ifelse(enh.hct.unanno$Gene %in% genes$id,1,0)
+
+#icea - HCT - no prox
+#enh.anno.hct.noprox <- enh.anno.hct[!((enh.anno.hct$Peak_type=="Distal" | enh.anno.hct$Peak_type=="Proximal") & enh.anno.hct$Annotation_method=="Proximal_anno"), ]
+#enh.anno.hct.noprox$ess <- ifelse(enh.anno.hct.noprox$Gene %in% genes$id,1,0)
+
+#icea - HCT - filter 
+#enh.anno.hct.filt <- enh.anno.hct[order(enh.anno.hct$Interaction_score, decreasing = T), ]
+#enh.anno.hct.filt <- enh.anno.hct.filt[!duplicated(enh.anno.hct.filt$peakID),]
+#enh.anno.hct.filt$ess <- ifelse(enh.anno.hct.filt$Gene %in% genes$id,1,0)
+
+
+# %enh with ess gene
+enh.ref <- length(unique(enh.prox[enh.prox$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
+length(unique(enh.great[enh.great$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100/enh.ref
+length(unique(enh.anno.a549.def[enh.anno.a549.def$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100/enh.ref
+length(unique(enh.anno.hct.def[enh.anno.hct.def$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100/enh.ref
+length(unique(enh.anno.hct.intonly[enh.anno.hct.intonly$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100/enh.ref
+#length(unique(enh.anno.hct.noprox[enh.anno.hct.noprox$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
+#length(unique(enh.hct.unanno[enh.hct.unanno$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
+#length(unique(enh.anno.hct.filt[enh.anno.hct.filt$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
+
+
+#Specificity: 
+int.ref <- length(unique(enh.prox[enh.prox$ess==1,]$id))/length(unique(enh.prox$id))*100
+length(unique(enh.great[enh.great$ess==1,]$id))/length(unique(enh.great$id))*100/int.ref
+length(unique(enh.anno.a549.def[enh.anno.a549.def$ess==1,]$id))/length(unique(enh.anno.a549.def$id))*100/int.ref
+length(unique(enh.anno.hct.def[enh.anno.hct.def$ess==1,]$id))/length(unique(enh.anno.hct.def$id))*100/int.ref
+length(unique(enh.anno.hct.intonly[enh.anno.hct.intonly$ess==1,]$id))/length(unique(enh.anno.hct.intonly$id))*100/int.ref
+#length(unique(enh.anno.hct.noprox[enh.anno.hct.noprox$ess==1,]$id))/length(unique(enh.anno.hct.noprox$id))*100
+#length(unique(enh.hct.unanno[enh.hct.unanno$ess==1,]$id))/length(unique(enh.hct.unanno$id))*100
+#length(unique(enh.anno.hct.filt[enh.anno.hct.filt$ess==1,]$id))/length(unique(enh.anno.hct.filt$id))*100
+
+```
 

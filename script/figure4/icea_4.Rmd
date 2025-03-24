@@ -430,3 +430,37 @@ write.table(BT_DRE_interaction_info, file = "output/data/figure4/Table_S1G_BT_DR
 ```
 
 
+
+
+##### Csynth
+```{r}
+start=8475172
+end=11980501
+#Int
+int.p2c2.gata3 <- data.frame(chr=int.p2c2$chr1, a1=int.p2c2$s1+2500, a2=int.p2c2$s2+2500, score=-log(int.p2c2$Q.Value_Bias))
+int.p2c2.gata3 <- int.p2c2.gata3[int.p2c2.gata3$chr=="chr2" & int.p2c2.gata3$a1>=8475172 & int.p2c2.gata3$a2<=11980501,]
+write.table(int.p2c2.gata3[,2:4], "output/data/figure4/CSynth/gata3_p2c2.contacts", sep="\t", quote = F, col.names = T, row.names = F)
+
+int.wt.gata3 <- data.frame(chr=int.wt$chr1, a1=int.wt$s1+2500, a2=int.wt$s2+2500, score=-log(int.wt$Q.Value_Bias))
+int.wt.gata3 <- int.wt.gata3[int.wt.gata3$chr=="chr2" & int.wt.gata3$a1>=8475172 & int.wt.gata3$a2<=11980501,]
+write.table(int.wt.gata3[,2:4], "output/data/figure4/CSynth/gata3_wt.contacts", sep="\t", quote = F, col.names = T, row.names = F)
+
+int.eko.gata3 <- data.frame(chr=int.eko$chr1, a1=int.eko$s1+2500, a2=int.eko$s2+2500, score=-log(int.eko$Q.Value_Bias))
+int.eko.gata3 <- int.eko.gata3[int.eko.gata3$chr=="chr2" & int.eko.gata3$a1>=8475172 & int.eko.gata3$a2<=11980501,]
+write.table(int.eko.gata3[,2:4], "output/data/figure4/CSynth/gata3_eko.contacts", sep="\t", quote = F, col.names = T, row.names = F)
+
+test <- rbind(int.wt.gata3,int.wt.gata3, int.wt.gata3, int.wt.gata3)
+write.table(test[,2:4], "output/data/figure4/CSynth/gata3_test.contacts", sep="\t", quote = F, col.names = T, row.names = F)
+
+#Annotations
+
+#Gata3.anno <- data.frame(chr=rep("chr2", 15), start=c(9876099, 10008284, 10078582,10106301, 10265554, 8676810, 9233480,9511162, 9587044,9676986,10048247,10098399, 10101068,10079876,10152366), end=c(9881100, 10013285,10083583, 10106832, 10266487, 8677782,9234679,9512002,9588264,9678114,10049029,10099204,10101796,10081007,10153965), label=c("promoter", "distal", "alt", rep("", 12)), type=c("promoter", "distal", "alt", "Ebf1", "Ebf1", rep("Pax5", 8), "Ebf1_Pax5", "Ebf1_Pax5"), dist=".", col7=".", col8=".", color=c("37,58,90","0,0,0","93,46,82", "131,159, 93", "131,159, 93", rep("182,112,56", 8), "181, 179, 61",  "181, 179, 61"))
+Gata3.anno <- data.frame(chr=rep("chr2", 15), start=c(9876099, 10008284, 10078582,10106301, 10265554, 8676810, 9233480,9511162, 9587044,9676986,10048247,10098399, 10101068,10079876,10152366), end=c(9881100, 10013285,10083583, 10106832, 10266487, 8677782,9234679,9512002,9588264,9678114,10049029,10099204,10101796,10081007,10153965), label=c("promoter", "distal", "alt", rep("", 12)), type=c("promoter", "distal", "alt", "Ebf1", "Ebf1", rep("Pax5", 8), "Ebf1_Pax5", "Ebf1_Pax5"), dist=".", col7=".", col8=".", color=c("0,255,255","0,255,0","255,0,225", "131,159, 93", "131,159, 93", rep("182,112,56", 8), "181, 179, 61",  "181, 179, 61"))
+Gata3.anno$dist <- Gata3.anno$end-Gata3.anno$start
+
+#Gata3.anno$start <- Gata3.anno$start-5000
+#Gata3.anno$end <- Gata3.anno$end+5000
+
+write.table(Gata3.anno[1:3,], "output/data/figure4/CSynth/gata3_anno.bed", sep="\t", quote = F, col.names = F, row.names = F)
+```
+

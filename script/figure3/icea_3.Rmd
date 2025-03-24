@@ -180,8 +180,7 @@ colnames(EBF1.anno.Bdev) <- c("Gene", "entrezID", "Expression_WT", "Expression_E
 ### 3.2.2 B dev plot
 Plot of mean B cell count for guide pools (one per gene), color coded for WTvsEKO
 ```{r}
-guide.info.pool <- guide.info[guide.info$Type != "single",]
-
+guide.info.pool <- guide.info[guide.info$Type!="single",]
 
 guide.info.pool <- melt(setDT(guide.info.pool), id.vars = colnames(guide.info.pool[,1:7]), variable.name = "rep")
 guide.info.pool <- data.frame(guide.info.pool[!is.na(guide.info.pool$value)])
@@ -192,13 +191,85 @@ guide.info.pool <- guide.info.pool[guide.info.pool$Gene %in% c(EBF1.anno.Bdev$Ge
 
 #plot
 source("script/general/r_functions/TG_theme.R")
-compare_means(value ~ Name,  data = guide.info.pool, ref.group = "R26",
-              method = "t.test")
+compare_means(value ~ Name,  data = guide.info.pool, ref.group = "R26")
 guide.plot <- ggboxplot(guide.info.pool, x = "Name", y = "value", fill = "Expression_WTvsEKO",  color= "black")+
   geom_hline(yintercept = mean(guide.info.pool[guide.info.pool$Gene=="R26", "value"]), linetype = 2)+ 
   scale_fill_gradientn(colours=c("#1f426a","#cbcad7",'white','white',"#dcccdf", "#93302f"),breaks=c(-10, -5,0,5, 10), values=scales::rescale(c(-10,-log2(1.5)-0.01, -log2(1.5), log2(1.5), log2(1.5)+0.01, 10)),limits=c(-12, 12))+
   stat_compare_means(label = "p.signif", method = "t.test", ref.group = "R26", hide.ns = TRUE)+
   TG_theme()+xlab("") + ylab("B cell count")
+
+ggsave(path="output/plots/figure3/", filename="Guide_plot.pdf", plot = guide.plot, device = "pdf", dpi=300, height=5, width=7)
+
+```
+
+
+#tst
+```{r}
+library(tidyr)
+#Loading info about guides with B cell development effect (from Tinas KO experiment)
+guide.info <- read.table("data/other/Bdev_guides/Lineage_count_guides.txt", header=TRUE, sep="\t")
+#guide.info <- guide.info[guide.info$type!="single" & guide.info$gene !="Myl4" & guide.info$Exp !="249",]
+guide.info <- guide.info[!guide.info$guide %in% c("sg19", "sg2","sg69-70", "sg45" ),]
+guide.info <- aggregate(cbind(NK,Dendritic, Myeloid, B_cell, T_cell, Sum) ~ Exp + guide + type + gene + condition, data = guide.info, FUN = mean)
+guide.info.B <- guide.info[,c(1:5, 9)] %>% spread(key = "Exp", value = "B_cell")
+guide.info.B <- guide.info.B[order(guide.info.B$condition, decreasing = T),]
+#guide.info.B.n<- data.frame(guide.info.B[,1:3], rbind(mapply('/', guide.info.B[guide.info.B$condition=="OP9",4:ncol(guide.info.B)], guide.info.B[guide.info.B$guide=="sgR26" & guide.info.B$condition=="OP9",4:ncol(guide.info.B)]), mapply('/', guide.info.B[guide.info.B$condition=="DL1",4:ncol(guide.info.B)], guide.info.B[guide.info.B$guide=="sgR26" & guide.info.B$condition=="DL1",4:ncol(guide.info.B)])))
+
+
+#Extracting Ebf1 bound elements associated with B dev associated gene list
+EBF1.anno.Bdev <- merge(guide.info.B, rna.norm.WT.EKO, by.x="gene", by.y="symbol", all.x=T)
+EBF1.anno.Bdev <- EBF1.anno[EBF1.anno$Gene %in% guide.info.B$gene,]
+EBF1.anno.Bdev <- merge(merge(EBF1.anno.Bdev, rna.norm.WT.EKO[,c(3,10:12)], by.x="Gene", by.y="symbol"), guide.info.B[,1:4], by.x="Gene", by.y="gene")
+EBF1.anno.Bdev <- EBF1.anno.Bdev[,c(1,3,8:13,2,4:7)]
+colnames(EBF1.anno.Bdev) <- c("Gene", "entrezID", "Expression_WT", "Expression_EKO", "Expression_WTvsEKO","guide", "type", "condition","peakID", "DistanceTSS", "PeakType", "Annotation", "InteractionScore")
+```
+
+
+```{r}
+library(dplyr)
+guide.info.pool <- melt(setDT(guide.info.B), id.vars = colnames(guide.info.B[,1:4]), variable.name = "rep")
+guide.info.pool <- data.frame(guide.info.pool[!is.na(guide.info.pool$value)])
+guide.info.pool <- merge(guide.info.pool, unique(EBF1.anno.Bdev[,c(1,5)]), by.x="gene", by.y="Gene",all.x=T)
+guide.info.pool <- guide.info.pool[order(guide.info.pool$Expression_WTvsEKO, decreasing = T, na.last = F),]
+guide.info.pool <- guide.info.pool[guide.info.pool$gene %in% c(EBF1.anno.Bdev$Gene, "R26"),]
+guide.info.pool$condition <- factor(guide.info.pool$condition, levels=c("OP9", "DL1"))
+
+#Relative to R26
+R26.median  <- guide.info.pool[guide.info.pool$gene=="R26",] %>% group_by(condition) %>% summarise_at(vars(value), list(median = median))
+guide.info.pool$FC <- ifelse(guide.info.pool$condition =="OP9", guide.info.pool$value/R26.median[R26.mean$condition=="OP9",]$median, guide.info.pool$value/R26.median[R26.mean$condition=="DL1",]$median)
+guide.info.pool$log2FC <- log2(guide.info.pool$FC)
+guide.info.pool$name <- paste0(guide.info.pool$gene, "_",guide.info.pool$guide)
+
+#plot
+source("script/general/r_functions/TG_theme.R")
+guide.plot <- ggboxplot(guide.info.pool, x = "gene", y = "value", fill = "Expression_WTvsEKO",  color= "black")+
+  #geom_hline(yintercept = mean(guide.info.pool[guide.info.pool$gene=="R26", "value"]), linetype = 2)+ 
+  scale_fill_gradientn(colours=c("#1f426a","#cbcad7",'white','white',"#dcccdf", "#93302f"),breaks=c(-10, -5,0,5, 10), values=scales::rescale(c(-10,-log2(1.5)-0.01, -log2(1.5), log2(1.5), log2(1.5)+0.01, 10)),limits=c(-12, 12))+
+  stat_compare_means(label = "p.signif", ref.group = "R26", hide.ns = TRUE)+
+  TG_theme()+xlab("") + ylab("B cell count")+facet_grid(condition~.)+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)))+theme(panel.spacing = unit(2, "lines"))
+
+guide.plot <- ggboxplot(guide.info.pool, x = "gene", y = "FC", fill = "Expression_WTvsEKO",  color= "black")+
+  #geom_hline(yintercept = mean(guide.info.pool[guide.info.pool$gene=="R26", "FC"]), linetype = 2)+ 
+  scale_fill_gradientn(colours=c("#1f426a","#cbcad7",'white','white',"#dcccdf", "#93302f"),breaks=c(-10, -5,0,5, 10), values=scales::rescale(c(-10,-log2(1.5)-0.01, -log2(1.5), log2(1.5), log2(1.5)+0.01, 10)),limits=c(-12, 12))+
+  stat_compare_means(label = "p.signif",  ref.group = "R26", hide.ns = TRUE)+
+  TG_theme()+xlab("") + ylab("B cell count")+facet_grid(condition~.)+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05)))+theme(panel.spacing = unit(2, "lines"))
+
+guide.plot <- ggboxplot(guide.info.pool, x = "gene", y = "log2FC", fill = "Expression_WTvsEKO",  color= "black")+
+  #geom_hline(yintercept = mean(guide.info.pool[guide.info.pool$gene=="R26", "log2FC"]), linetype = 2)+ 
+  scale_fill_gradientn(colours=c("#1f426a","#cbcad7",'white','white',"#dcccdf", "#93302f"),breaks=c(-10, -5,0,5, 10), values=scales::rescale(c(-10,-log2(1.5)-0.01, -log2(1.5), log2(1.5), log2(1.5)+0.01, 10)),limits=c(-12, 12))+
+  stat_compare_means(label = "p.signif",  ref.group = "R26", hide.ns = TRUE)+
+  TG_theme()+xlab("") + ylab("B cell count")+facet_grid(condition~.)+
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05)))+theme(panel.spacing = unit(2, "lines"))
+
+guide.plot <- ggboxplot(guide.info.pool, x = "name", y = "log2FC", fill = "Expression_WTvsEKO",  color= "black")+
+  #geom_hline(yintercept = mean(guide.info.pool[guide.info.pool$gene=="R26", "log2FC"]), linetype = 2)+ 
+  scale_fill_gradientn(colours=c("#1f426a","#cbcad7",'white','white',"#dcccdf", "#93302f"),breaks=c(-10, -5,0,5, 10), values=scales::rescale(c(-10,-log2(1.5)-0.01, -log2(1.5), log2(1.5), log2(1.5)+0.01, 10)),limits=c(-12, 12))+
+  stat_compare_means(label = "p.signif",  ref.group = "R26 sgR26", hide.ns = TRUE)+
+  TG_theme()+xlab("") + ylab("B cell count")+facet_grid(condition~.)+
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05)))+theme(panel.spacing = unit(2, "lines"))
+
 
 ggsave(path="output/plots/figure3/", filename="Guide_plot.pdf", plot = guide.plot, device = "pdf", dpi=300, height=5, width=7)
 
