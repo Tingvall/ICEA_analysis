@@ -592,19 +592,6 @@ enh.anno.hct.def$ess <- ifelse(enh.anno.hct.def$Gene %in% genes$id,1,0)
 enh.anno.hct.intonly <- enh.anno.hct.int
 enh.anno.hct.intonly$ess <- ifelse(enh.anno.hct.intonly$Gene %in% genes$id,1,0)
 
-#icea - HCT - unannotated
-#enh.hct.unanno <- enh.anno.hct
-#enh.hct.unanno$ess <- ifelse(enh.hct.unanno$Gene %in% genes$id,1,0)
-
-#icea - HCT - no prox
-#enh.anno.hct.noprox <- enh.anno.hct[!((enh.anno.hct$Peak_type=="Distal" | enh.anno.hct$Peak_type=="Proximal") & enh.anno.hct$Annotation_method=="Proximal_anno"), ]
-#enh.anno.hct.noprox$ess <- ifelse(enh.anno.hct.noprox$Gene %in% genes$id,1,0)
-
-#icea - HCT - filter 
-#enh.anno.hct.filt <- enh.anno.hct[order(enh.anno.hct$Interaction_score, decreasing = T), ]
-#enh.anno.hct.filt <- enh.anno.hct.filt[!duplicated(enh.anno.hct.filt$peakID),]
-#enh.anno.hct.filt$ess <- ifelse(enh.anno.hct.filt$Gene %in% genes$id,1,0)
-
 
 # %enh with ess gene
 enh.ref <- length(unique(enh.prox[enh.prox$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
@@ -612,10 +599,6 @@ length(unique(enh.great[enh.great$ess==1,]$peakID))/length(unique(enh_f_o$V4))*1
 length(unique(enh.anno.a549.def[enh.anno.a549.def$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100/enh.ref
 length(unique(enh.anno.hct.def[enh.anno.hct.def$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100/enh.ref
 length(unique(enh.anno.hct.intonly[enh.anno.hct.intonly$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100/enh.ref
-#length(unique(enh.anno.hct.noprox[enh.anno.hct.noprox$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
-#length(unique(enh.hct.unanno[enh.hct.unanno$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
-#length(unique(enh.anno.hct.filt[enh.anno.hct.filt$ess==1,]$peakID))/length(unique(enh_f_o$V4))*100
-
 
 #Specificity: 
 int.ref <- length(unique(enh.prox[enh.prox$ess==1,]$id))/length(unique(enh.prox$id))*100
@@ -623,9 +606,5 @@ length(unique(enh.great[enh.great$ess==1,]$id))/length(unique(enh.great$id))*100
 length(unique(enh.anno.a549.def[enh.anno.a549.def$ess==1,]$id))/length(unique(enh.anno.a549.def$id))*100/int.ref
 length(unique(enh.anno.hct.def[enh.anno.hct.def$ess==1,]$id))/length(unique(enh.anno.hct.def$id))*100/int.ref
 length(unique(enh.anno.hct.intonly[enh.anno.hct.intonly$ess==1,]$id))/length(unique(enh.anno.hct.intonly$id))*100/int.ref
-#length(unique(enh.anno.hct.noprox[enh.anno.hct.noprox$ess==1,]$id))/length(unique(enh.anno.hct.noprox$id))*100
-#length(unique(enh.hct.unanno[enh.hct.unanno$ess==1,]$id))/length(unique(enh.hct.unanno$id))*100
-#length(unique(enh.anno.hct.filt[enh.anno.hct.filt$ess==1,]$id))/length(unique(enh.anno.hct.filt$id))*100
-
 ```
 

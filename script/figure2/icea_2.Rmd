@@ -144,7 +144,7 @@ BT_elements_anno_ICEA230238 <- read.table("output/data/figure2/annotation/atac_2
 BT_elements_anno_ICEA230238$peakID <- paste0(BT_elements_anno_ICEA230238$Chr, ":", BT_elements_anno_ICEA230238$Start, "-", BT_elements_anno_ICEA230238$End)
 BT_elements_anno_ICEA230238 <- BT_elements_anno_ICEA230238[!is.na(BT_elements_anno_ICEA230238$Distance_to_TSS),]
 BT_elements_anno_ICEA230238$Type <- ifelse(abs(BT_elements_anno_ICEA230238$Distance_to_TSS) <= dist, "Proximal", "Distal")
-BT_elements_anno_ICEA230238 <- BT_elements_anno_ICEA230238[,c(17,9,5,18)]
+BT_elements_anno_ICEA230238 <- BT_elements_anno_ICEA230238[,c(17,9,5,18, 10,13)]
 BT_elements_anno_ICEA230238 <- BT_elements_anno_ICEA230238[!duplicated(BT_elements_anno_ICEA230238),]
 
 #ICEA - P2C2
@@ -152,7 +152,7 @@ BT_elements_anno_ICEAP2C2 <- read.table("output/data/figure2/annotation/atac_230
 BT_elements_anno_ICEAP2C2$peakID <- paste0(BT_elements_anno_ICEAP2C2$Chr, ":", BT_elements_anno_ICEAP2C2$Start, "-", BT_elements_anno_ICEAP2C2$End)
 BT_elements_anno_ICEAP2C2 <- BT_elements_anno_ICEAP2C2[!is.na(BT_elements_anno_ICEAP2C2$Distance_to_TSS),]
 BT_elements_anno_ICEAP2C2$Type <- ifelse(abs(BT_elements_anno_ICEAP2C2$Distance_to_TSS) <= dist, "Proximal", "Distal")
-BT_elements_anno_ICEAP2C2 <- BT_elements_anno_ICEAP2C2[,c(17,9,5,18)]
+BT_elements_anno_ICEAP2C2 <- BT_elements_anno_ICEAP2C2[,c(17,9,5,18, 10,13)]
 BT_elements_anno_ICEAP2C2 <- BT_elements_anno_ICEAP2C2[!duplicated(BT_elements_anno_ICEAP2C2),]
 ```
 
@@ -160,7 +160,7 @@ BT_elements_anno_ICEAP2C2 <- BT_elements_anno_ICEAP2C2[!duplicated(BT_elements_a
 ### 3.2.3 Identification of putative regualatory element of B/T genes
 ```{r}
 BT.elements.ICEA <- rbind(data.frame(BT_elements_anno_ICEA230238[BT_elements_anno_ICEA230238$Gene %in% B.genes$symbol,], group="B"), data.frame(BT_elements_anno_ICEAP2C2[BT_elements_anno_ICEAP2C2$Gene %in% T.genes$symbol,], group="T"))
-save(BT.elements.ICEA, file="output/rdata/figure2/BT_elements_liana.Rdata")
+#save(BT.elements.ICEA, file="output/rdata/figure2/BT_elements_liana.Rdata")
 
 #Filter if not open
 BT_elements_info <- read.table("output/data/figure2/peaks/atac_230238_p2c2_idr_consensus_info.bed", header=F, sep="\t")
@@ -168,6 +168,22 @@ colnames(BT_elements_info) <- c("chr", "start", "end", "celltype")
 BT_elements_info$peakID <- paste0(BT_elements_info$chr, ":", BT_elements_info$start, "-", BT_elements_info$end)
 
 BT.elements.ICEA <- BT.elements.ICEA[!(BT.elements.ICEA$group=="B" & BT.elements.ICEA$peakID %in% BT_elements_info[BT_elements_info$celltype=="P2C2",]$peakID) & !(BT.elements.ICEA$group=="T" & BT.elements.ICEA$peakID %in% BT_elements_info[BT_elements_info$celltype=="230238",]$peakID),]
+BT.elements.ICEA$type_anno <- ifelse(BT.elements.ICEA$Peak_type=="Promoter", "Promoter", ifelse(BT.elements.ICEA$Annotation_method=="Proximal_anno", "Proximal","Interaction" ))
+
+#stats for revision
+table(BT.elements.ICEA$type_anno, BT.elements.ICEA$group)
+#B: 15.22% Proximal anno
+#T: 18.54% Priximal annp
+
+BT.elements.ICEA.anno.type.B <- unique(BT.elements.ICEA[BT.elements.ICEA$group=="B" & BT.elements.ICEA$Peak_type!="Promoter",c(1,7)])
+BT.elements.ICEA.anno.type.B$type <- ifelse(BT.elements.ICEA.anno.type.B$peakID %in% BT.elements.ICEA[BT.elements.ICEA$group=="B" & BT.elements.ICEA$Annotation_method=="Interaction_anno",]$peakID & BT.elements.ICEA.anno.type.B$peakID %in% BT.elements.ICEA[BT.elements.ICEA$group=="B" & BT.elements.ICEA$Annotation_method=="Proximal_anno",]$peakID, "Both", ifelse( BT.elements.ICEA.anno.type.B$peakID %in% BT.elements.ICEA[BT.elements.ICEA$group=="B" & BT.elements.ICEA$Annotation_method=="Interaction_anno",]$peakID, "Interaction", "Promimity"))
+
+BT.elements.ICEA.anno.type.T <- unique(BT.elements.ICEA[BT.elements.ICEA$group=="T" & BT.elements.ICEA$Peak_type!="Promoter",c(1,7)])
+BT.elements.ICEA.anno.type.T$type <- ifelse(BT.elements.ICEA.anno.type.T$peakID %in% BT.elements.ICEA[BT.elements.ICEA$group=="T" & BT.elements.ICEA$Annotation_method=="Interaction_anno",]$peakID & BT.elements.ICEA.anno.type.T$peakID %in% BT.elements.ICEA[BT.elements.ICEA$group=="T" & BT.elements.ICEA$Annotation_method=="Proximal_anno",]$peakID, "Both", ifelse( BT.elements.ICEA.anno.type.T$peakID %in% BT.elements.ICEA[BT.elements.ICEA$group=="T" & BT.elements.ICEA$Annotation_method=="Interaction_anno",]$peakID, "Interaction", "Promimity"))
+
+BT.elements.ICEA.anno.type <- rbind(BT.elements.ICEA.anno.type.B, BT.elements.ICEA.anno.type.T)
+
+table(BT.elements.ICEA.anno.type$group, BT.elements.ICEA.anno.type$type)
 ```
 
 
@@ -182,7 +198,7 @@ samples.atac.230238.p2c2 <- read.table("data/atac/info/samples_atac_230238_p2c2.
 #Extracting normalized coutns
 dbo.atac.230238.p2c2 <- dba(sampleSheet=samples.atac.230238.p2c2)
 counts.atac.230238.p2c2 <- dba.count(dbo.atac.230238.p2c2, peaks="output/data/figure2/peaks/atac_230238_p2c2_idr_consensus_cut.bed", summits = F)
-save(counts.atac.230238.p2c2, file="output/rdata/figure2/counts.atac.230238.p2c2_atac_230238_p2c2_consensus_peaks.Rdata")
+#save(counts.atac.230238.p2c2, file="output/rdata/figure2/counts.atac.230238.p2c2_atac_230238_p2c2_consensus_peaks.Rdata")
 
 #Saving raw counts from consensus peak set to data frame
 atac.230238.p2c2.raw.count <- lapply(counts.atac.230238.p2c2[["peaks"]],function(x) x[,6])
@@ -196,7 +212,7 @@ counts.atac.230238.p2c2.norm <- dba.peakset(counts.atac.230238.p2c2, bRetrieve=T
 counts.atac.230238.p2c2.norm.df <- as.data.frame(counts.atac.230238.p2c2.norm)
 counts.atac.230238.p2c2.norm.df$peakID <- paste0(counts.atac.230238.p2c2.norm.df$seqnames, ":", counts.atac.230238.p2c2.norm.df$start, "-", counts.atac.230238.p2c2.norm.df$end)
 counts.atac.230238.p2c2.norm.df.mean <- data.frame(peakID=counts.atac.230238.p2c2.norm.df$peakID, ATAC_230238=rowMeans(counts.atac.230238.p2c2.norm.df[,6:7]), ATAC_p2c2=rowMeans(counts.atac.230238.p2c2.norm.df[,8:9]))
-write.table(counts.atac.230238.p2c2.norm.df.mean, "output/data/figure2/atac_230238_p2c2_consensus_peaks_count.txt", quote = F, sep = "\t", row.names = F, col.names = T)
+#write.table(counts.atac.230238.p2c2.norm.df.mean, "output/data/figure2/atac_230238_p2c2_consensus_peaks_count.txt", quote = F, sep = "\t", row.names = F, col.names = T)
 
 #Convert to long format
 counts.atac.230238.p2c2.norm.df.mean.long <- rbind(data.frame(peakID=counts.atac.230238.p2c2.norm.df.mean$peakID, ATAC=counts.atac.230238.p2c2.norm.df.mean$ATAC_230238, celltype="230238"),data.frame(peakID=counts.atac.230238.p2c2.norm.df.mean$peakID, ATAC=counts.atac.230238.p2c2.norm.df.mean$ATAC_p2c2, celltype="P2C2"))
@@ -224,6 +240,23 @@ panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+
   stat_compare_means(comparisons = my_comparisons, label.y = c(12), label="p.signif")
 
 ggsave(path="output/plots/figure2", filename="BT_element_ATAC.pdf", plot = BT_element_atac, device = "pdf", dpi=300, width = 6, height = 4)
+```
+
+Violin plot of atac levels in non-promoter peaks: Grouped on annotation methhod
+```{r}
+BT.elements.ICEA.anno.type <- merge(BT.elements.ICEA.anno.type, BT.elements.atac.filt[,c("peakID", "ATAC", "celltype")], by="peakID")
+BT.elements.ICEA.anno.type$type <- factor(BT.elements.ICEA.anno.type$type, levels=c("Promimity", "Both", "Interaction"))
+
+my_comparisons <- list( c("230238", "P2C2"))
+BT_element_atac.ann <- ggplot(BT.elements.ICEA.anno.type, aes(celltype,log2(ATAC+1), fill=celltype))+
+  geom_violin()+ geom_boxplot(width=0.1, outlier.alpha = 0)+
+  theme_bw() + theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))+scale_fill_manual(values=c(rep(c("white","grey"), 6)))+
+    facet_grid(group~ type)+
+  ylim(0,13.5)+
+  stat_compare_means(comparisons = my_comparisons, label.y = c(12), label="p.signif")
+
+ggsave(path="output/plots/figure2", filename="BT_element_ATAC_annotation_method.pdf", plot = BT_element_atac.ann, device = "pdf", dpi=300, width = 6, height = 4)
 ```
 
 
