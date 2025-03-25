@@ -480,7 +480,7 @@ ggsave(path="output/plots/figure3/", filename="Ebf1_mediated_change_in_chromatin
 
 ### 3.5.2 Motif analysis for revision
 
-#Save data
+Save data
 ```{r}
 enh.motif <- unique(rbind(enh.p[,c(1,3,4)],enh.d[,c(1,3,4)]))
 enh.motif$atac_group2 <- ifelse(enh.motif$atac_group %in% c("NEW", "UP"), "UP", ifelse(enh.motif$atac_group %in% c("LOST", "DOWN"), "DOWN", "NODIFF"))
