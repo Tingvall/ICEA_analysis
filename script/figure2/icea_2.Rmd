@@ -188,7 +188,6 @@ table(BT.elements.ICEA.anno.type$group, BT.elements.ICEA.anno.type$type)
 
 
 
-## 2.3 Chromatin status in B/T elements
 
 ### 2.3.1 Preprocessing 
 ```{r}

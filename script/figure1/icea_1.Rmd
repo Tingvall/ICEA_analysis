@@ -307,7 +307,6 @@ write.table(Enh.Prom.pairs.bed, file="output/data/figure1/K562_Enhancers_filtere
 
 # Significant enhancer-gene pairs
 Enh.Prom.pairs.sign <- Enh.Prom.pairs[Enh.Prom.pairs$Significant==TRUE,]
-
 ```
 
 
@@ -324,6 +323,7 @@ Enh.anno.HOMER <- read.table("output/data/figure1/annotation/K562_Enhancers_HOME
 names(Enh.anno.HOMER)[1] <- 'peakID'
 Enh.anno.HOMER$id <- paste0(Enh.anno.HOMER$peakID, "_", Enh.anno.HOMER$Gene)
 Enh.anno.HOMER <- Enh.anno.HOMER[!duplicated(Enh.anno.HOMER$id),]
+Enh.anno.HOMER <- Enh.anno.HOMER[Enh.anno.HOMER$Gene.Name !="",]
 ```
 
 GREAT annotation
@@ -342,6 +342,17 @@ Enh.anno.GREAT <- Enh.anno.GREAT[!duplicated(Enh.anno.GREAT$id),]
 
 
 ICE-A interaction-based annotation of OCRs
+```{r}
+int <- read.table("data/interactions/GSE101498_K562_HiChIP_H3K27ac_FitHiChIP_v_9_1.interactions_FitHiC_Q0.05_MergeNearContacts.bed", header=TRUE, sep="\t", quote="")
+
+int$score <- -log(int$Q.Value_Bias)
+int[is.infinite(int$score),"score"] <- 1000
+int <- int[order(int$score, decreasing = T),]
+int.score.50 <- min(int[1:nrow(int)*0.5,]$score)
+int.score.20 <- min(int[1:nrow(int)*0.20,]$score)
+int.score.5 <- min(int[1:nrow(int)*0.05,]$score)
+```
+
 ```{bash engine.opts='-l'}
 script_dir="script/figure1"
 bash $script_dir/ICEA_GSE101498_K562_HiChIP_H3K27ac_K562_enhancers_annotation.sh
@@ -353,8 +364,18 @@ Enh.anno.ICEA <- read.table("output/data/figure1/annotation/K562_enhancers_HiChI
 Enh.anno.ICEA$peakID <- paste(Enh.anno.ICEA$Chr, ":", Enh.anno.ICEA$Start, "-", Enh.anno.ICEA$End, sep = "")
 Enh.anno.ICEA$id <- paste0(Enh.anno.ICEA$peakID, "_", Enh.anno.ICEA$Gene)
 Enh.anno.ICEA <- Enh.anno.ICEA[!duplicated(Enh.anno.ICEA$id),]
+Enh.anno.ICEA <- Enh.anno.ICEA[!is.na(Enh.anno.ICEA$Distance_to_TSS),]
+
 ```
 
+Overlap only
+```{r}
+Enh.anno.noprox <- Enh.anno.ICEA[Enh.anno.ICEA$Annotation_method=="Interaction_anno",]
+Enh.anno.noneaby <- Enh.anno.ICEA[!(Enh.anno.ICEA$Annotation_method=="Interaction_anno" & abs(Enh.anno.ICEA$Peak_bin)>0) | !(Enh.anno.ICEA$Annotation_method=="Interaction_anno" & abs(Enh.anno.ICEA$Promoter_bin)>0),]
+Enh.anno.noneaby <- Enh.anno.ICEA[(is.na(Enh.anno.ICEA$Peak_bin) | Enh.anno.ICEA$Peak_bin==0) & (is.na(Enh.anno.ICEA$Promoter_bin) | Enh.anno.ICEA$Promoter_bin==0),]
+Enh.anno.overlap <- Enh.anno.noneaby[Enh.anno.noneaby$Annotation_method=="Interaction_anno",]
+
+```
 
 
 ### 1.3.3 Comparison in the ability to indetify enhancers in distance ranges
@@ -364,9 +385,12 @@ Enh.Prom.pairs.sig <- Enh.Prom.pairs[Enh.Prom.pairs$Significant==1,]
 Enh.Prom.pairs.sig$PROXIMITY <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.HOMER$id, 1, 0)
 Enh.Prom.pairs.sig$GREAT <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.GREAT$id, 1, 0)
 Enh.Prom.pairs.sig$ICEA <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.ICEA$id, 1, 0)
+Enh.Prom.pairs.sig$NoProx <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.noprox$id, 1, 0)
+#Enh.Prom.pairs.sig$NoNearby <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.noneaby$id, 1, 0)
+Enh.Prom.pairs.sig$Overlap <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.overlap$id, 1, 0)
 
-Enh.Prom.pairs.sig.summary <- gather(Enh.Prom.pairs.sig[c(1,27:31)], method, count, PROXIMITY:ICEA, factor_key=TRUE)
-Enh.Prom.pairs.sig.summary$method <- factor(Enh.Prom.pairs.sig.summary$method, levels=c("PROXIMITY", "GREAT","ICEA"))
+Enh.Prom.pairs.sig.summary <- gather(Enh.Prom.pairs.sig[c(1,27:33)], method, count, PROXIMITY:Overlap, factor_key=TRUE)
+Enh.Prom.pairs.sig.summary$method <- factor(Enh.Prom.pairs.sig.summary$method, levels=c("PROXIMITY", "GREAT","ICEA", "NoProx","Overlap"))
 Enh.Prom.pairs.sig.summary.element <- Enh.Prom.pairs.sig.summary %>% 
   dplyr::group_by(DistanceBin, method) %>% 
   dplyr::count(count, .drop=F) %>% 
@@ -381,15 +405,15 @@ names(dist.lab) = levels(Enh.Prom.pairs.sig.summary$DistanceBin)
 Enh.plot <-ggplot(data=Enh.Prom.pairs.sig.summary.element[Enh.Prom.pairs.sig.summary.element$count==1,], aes(x=method, y=percent, fill=method)) +
   geom_bar(stat="identity", position=position_dodge(width = 0.5), width=0.8, color="black")+
   facet_wrap(. ~ DistanceBin, nrow=1,   labeller = labeller(DistanceBin = dist.lab), strip.position = "bottom")+
-  scale_x_discrete(breaks=c("PROXIMITY", "GREAT","ICEA"), labels=c("", "", ""))+
+  scale_x_discrete(breaks=c("PROXIMITY", "GREAT","ICEA", "Overlap"), labels=c("", "", "", ""))+
   xlab("")+
   scale_y_continuous(labels=scales::percent_format(accuracy = 1), name="% Enhancers identified", expand = c(0,0))+
   labs(y = "Percent", fill="method")+
   TG_theme(aspect.ratio=3)+
-  #scale_fill_viridis_d(name="Annotation",alpha = 1,begin = 0, end = 1,direction = -1,option = "D",aesthetics = "fill")+
+  scale_fill_viridis_d(name="Annotation",alpha = 1,begin = 0, end = 1,direction = -1,option = "D",aesthetics = "fill")+
   theme(axis.title.y=element_text(size=20), axis.text.y = element_text(size=14), legend.position="right", legend.title = element_blank(), legend.text = element_text(size = 10),  strip.text.x =element_text(size = 16),
         strip.placement = "outside",  legend.box.margin=margin(-200,0,-25,-100))+
-  scale_fill_manual(values = c("grey", "black", "#3bab66"))
+  scale_fill_manual(values = c("#D1D1D3", "black", "#78A056", "orange"))
 
 ggsave(path="output/plots/figure1", filename="K562_enhancer_annotation_element_based.pdf", plot = Enh.plot, device = "pdf", dpi=300)
 
@@ -430,6 +454,179 @@ ggsave(path="output/plots/figure1", filename="K562_enhancer_annotation_gene_base
 
 ### 1.3.5 Example of situation where only interaction-based annotation identify elements 
 Browser track of the Gata1 locus
+
+### 1.3.6 False positivie analysis
+
+Preparations
+```{r}
+dist_cutoff <-25000
+
+#Select most signifcant
+Enh.anno.ICEA.50 <- Enh.anno.ICEA[!(-log10(Enh.anno.ICEA$Interaction_score)<int.score.50 & Enh.anno.ICEA$Annotation_method=="Interaction_anno"),]
+Enh.anno.ICEA.25 <- Enh.anno.ICEA[!(-log10(Enh.anno.ICEA$Interaction_score)<int.score.25 & Enh.anno.ICEA$Annotation_method=="Interaction_anno"),]
+Enh.anno.ICEA.5 <- Enh.anno.ICEA[!(-log10(Enh.anno.ICEA$Interaction_score)<int.score.5 & Enh.anno.ICEA$Annotation_method=="Interaction_anno"),]
+
+#Add stats for filtered
+Enh.Prom.pairs.sig$ICEA_50 <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.ICEA.50$id, 1, 0)
+Enh.Prom.pairs.sig$ICEA_25 <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.ICEA.25$id, 1, 0)
+Enh.Prom.pairs.sig$ICEA_5 <- ifelse(Enh.Prom.pairs.sig$id %in% Enh.anno.ICEA.5$id, 1, 0)
+
+#Group sig paris based on distance
+Enh.Prom.pairs.sig.short <- Enh.Prom.pairs.sig[abs(Enh.Prom.pairs.sig$DistanceTSS)<=dist_cutoff,]
+Enh.Prom.pairs.sig.long <- Enh.Prom.pairs.sig[abs(Enh.Prom.pairs.sig$DistanceTSS)>dist_cutoff,]
+
+
+#Identified enhancers
+Enh.Prom.pairs.sig.short.agg <- aggregate(.~Gene, Enh.Prom.pairs.sig.short[,c(1,29:36)], sum)
+Enh.Prom.pairs.sig.short.agg.tot <- aggregate(.~Gene, Enh.Prom.pairs.sig.short[,c(1,8)], sum)
+Enh.Prom.pairs.sig.short.agg$tot <- Enh.Prom.pairs.sig.short.agg.tot$Significant
+
+Enh.Prom.pairs.sig.long.agg <- aggregate(.~Gene, Enh.Prom.pairs.sig.long[,c(1,29:36)], sum)
+Enh.Prom.pairs.sig.long.agg.tot <- aggregate(.~Gene, Enh.Prom.pairs.sig.long[,c(1,8)], sum)
+Enh.Prom.pairs.sig.long.agg$tot <- Enh.Prom.pairs.sig.long.agg.tot$Significant
+
+Enh.prom.n <- rbind(data.frame(method=colnames(Enh.Prom.pairs.sig.short.agg[,2:9]), value=colMeans(Enh.Prom.pairs.sig.short.agg[,2:9]), group="proximal"), data.frame(method=colnames(Enh.Prom.pairs.sig.long.agg[,2:9]), value=colMeans(Enh.Prom.pairs.sig.long.agg[,2:9]), group="distal"))
+
+Enh.prom.nf <- rbind(data.frame(method=colnames(Enh.Prom.pairs.sig.short.agg[,2:9]), value=colMeans(Enh.Prom.pairs.sig.short.agg[,2:9]/Enh.Prom.pairs.sig.short.agg$tot), group="proximal"), data.frame(method=colnames(Enh.Prom.pairs.sig.long.agg[,2:9]), value=colMeans(Enh.Prom.pairs.sig.long.agg[,2:9]/Enh.Prom.pairs.sig.long.agg$tot), group="distal"))
+
+
+#False positives
+Enh.anno.HOMER$sig <- ifelse(Enh.anno.HOMER$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+Enh.anno.GREAT$sig <- ifelse(Enh.anno.GREAT$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+Enh.anno.ICEA$sig <- ifelse(Enh.anno.ICEA$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+Enh.anno.overlap$sig <- ifelse(Enh.anno.overlap$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+Enh.anno.noprox$sig <- ifelse(Enh.anno.noprox$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+Enh.anno.ICEA.50$sig <- ifelse(Enh.anno.ICEA.50$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+Enh.anno.ICEA.25$sig <- ifelse(Enh.anno.ICEA.25$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+Enh.anno.ICEA.5$sig <- ifelse(Enh.anno.ICEA.5$id %in% Enh.Prom.pairs.sig.f$id, 1, 0)
+
+Enh.anno.HOMER$group <- ifelse(abs(Enh.anno.HOMER$Distance.to.TSS)<=dist_cutoff, "short", "long")
+Enh.anno.GREAT$group <- ifelse(abs(Enh.anno.GREAT$DistanceTSS)<=dist_cutoff, "short", "long")
+Enh.anno.ICEA$group <- ifelse(abs(Enh.anno.ICEA$Distance_to_TSS)<=dist_cutoff, "short", "long")
+Enh.anno.overlap$group <- ifelse(abs(Enh.anno.overlap$Distance_to_TSS)<=dist_cutoff, "short", "long")
+Enh.anno.noprox$group <- ifelse(abs(Enh.anno.noprox$Distance_to_TSS)<=dist_cutoff, "short", "long")
+Enh.anno.ICEA.50$group <- ifelse(abs(Enh.anno.ICEA.50$Distance_to_TSS)<=dist_cutoff, "short", "long")
+Enh.anno.ICEA.25$group <- ifelse(abs(Enh.anno.ICEA.25$Distance_to_TSS)<=dist_cutoff, "short", "long")
+Enh.anno.ICEA.5$group <- ifelse(abs(Enh.anno.ICEA.5$Distance_to_TSS)<=dist_cutoff, "short", "long")
+
+#short
+Enh.anno.HOMER.short  <- Enh.anno.HOMER[Enh.anno.HOMER$group=="short",] %>% group_by(Gene.Name) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.GREAT.short  <- Enh.anno.GREAT[Enh.anno.GREAT$group=="short",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.short  <- Enh.anno.ICEA[Enh.anno.ICEA$group=="short",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.overlap.short  <- Enh.anno.overlap[Enh.anno.overlap$group=="short",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.noprox.short  <- Enh.anno.noprox[Enh.anno.noprox$group=="short",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.50.short  <- Enh.anno.ICEA.50[Enh.anno.ICEA.50$group=="short",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.25.short  <- Enh.anno.ICEA.25[Enh.anno.ICEA.25$group=="short",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.5.short  <- Enh.anno.ICEA.5[Enh.anno.ICEA.5$group=="short",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+
+Enh.anno.short <- merge(merge(merge(merge(merge(merge(merge(merge(data.frame(Gene=unique(Enh.Prom.pairs.sig.short$Gene)), Enh.anno.HOMER.short, by.x="Gene", by.y="Gene.Name", all.x=T), Enh.anno.GREAT.short, by="Gene", all.x=T),Enh.anno.ICEA.short, by="Gene", all.x=T), Enh.anno.overlap.short, by="Gene", all.x=T),Enh.anno.noprox.short, by="Gene", all.x=T), Enh.anno.ICEA.50.short, by="Gene", all.x=T), Enh.anno.ICEA.25.short, by="Gene", all.x=T), Enh.anno.ICEA.5.short, by="Gene", all.x=T)
+rownames(Enh.anno.short) <-Enh.anno.short$Gene
+Enh.anno.short <- Enh.anno.short[,2:9]
+colnames(Enh.anno.short) <- c("HOMER", "GREAT", "ICEA", "Overlap", "NoProx","ICEA_50", "ICEA_25", "ICEA_5")
+colMeans(Enh.anno.short, na.rm=T)
+
+#long
+Enh.anno.HOMER.long  <- Enh.anno.HOMER[Enh.anno.HOMER$group=="long",] %>% group_by(Gene.Name) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.GREAT.long  <- Enh.anno.GREAT[Enh.anno.GREAT$group=="long",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.long  <- Enh.anno.ICEA[Enh.anno.ICEA$group=="long",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.overlap.long  <- Enh.anno.overlap[Enh.anno.overlap$group=="long",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.noprox.long  <- Enh.anno.noprox[Enh.anno.noprox$group=="long",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.50.long  <- Enh.anno.ICEA.50[Enh.anno.ICEA.50$group=="long",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.25.long  <- Enh.anno.ICEA.25[Enh.anno.ICEA.25$group=="long",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+Enh.anno.ICEA.5.long  <- Enh.anno.ICEA.5[Enh.anno.ICEA.5$group=="long",] %>% group_by(Gene) %>% summarize(count = sum(sig != 0)/n())
+
+Enh.anno.long <- merge(merge(merge(merge(merge(merge(merge(merge(data.frame(Gene=unique(Enh.Prom.pairs.sig.long$Gene)), Enh.anno.HOMER.long, by.x="Gene", by.y="Gene.Name", all.x=T), Enh.anno.GREAT.long, by="Gene", all.x=T),Enh.anno.ICEA.long, by="Gene", all.x=T), Enh.anno.overlap.long, by="Gene", all.x=T), Enh.anno.noprox.long, by="Gene", all.x=T), Enh.anno.ICEA.50.long, by="Gene", all.x=T), Enh.anno.ICEA.25.long, by="Gene", all.x=T), Enh.anno.ICEA.5.long, by="Gene", all.x=T)
+rownames(Enh.anno.long) <-Enh.anno.long$Gene
+Enh.anno.long <- Enh.anno.long[,2:9]
+colnames(Enh.anno.long) <- c("HOMER", "GREAT", "ICEA", "Overlap", "NoProx","ICEA_50", "ICEA_25", "ICEA_5")
+colMeans(Enh.anno.long, na.rm=T)
+
+Enh.prom.fp <- rbind(data.frame(method=colnames(Enh.anno.short), value=colMeans(Enh.anno.short, na.rm=T), group="proximal"), data.frame(method=colnames(Enh.anno.long), value=colMeans(Enh.anno.long, na.rm=T), group="distal"))
+
+```
+
+Visualization
+```{r}
+#Number of sig identified per gene
+Enh.prom.n$group <- factor(Enh.prom.n$group, levels=c("proximal", "distal"))
+Enh.prom.n$method <- factor(Enh.prom.n$method, levels=c("HOMER", "GREAT", "Overlap","NoProx","ICEA","ICEA_50", "ICEA_25", "ICEA_5"))
+
+icea.sup.n <-ggplot(data=Enh.prom.n, aes(x=group, y=value, fill=group)) +
+  geom_bar(stat="identity", position=position_dodge(width = 0.5), width=0.8, color="black")+
+  facet_grid(. ~ method)+
+  xlab("")+TG_theme()+
+  scale_y_continuous(name="# Enhancers identified", expand = c(0,0))+
+  scale_fill_manual(values = c("black", "#78A056"))
+ggsave(path="output/plots/figure1", filename="icea_sup_n.pdf", plot = icea.sup.n, device = "pdf", dpi=300)
+
+
+#Fraction of identified
+Enh.prom.nf$group <- factor(Enh.prom.nf$group, levels=c("proximal", "distal"))
+Enh.prom.nf$method <- factor(Enh.prom.nf$method, levels=c("HOMER", "GREAT", "Overlap","NoProx","ICEA","ICEA_50", "ICEA_25", "ICEA_5"))
+
+icea.sup.nf <-ggplot(data=Enh.prom.nf, aes(x=group, y=value, fill=group)) +
+  geom_bar(stat="identity", position=position_dodge(width = 0.5), width=0.8, color="black")+
+  facet_grid(. ~ method)+
+  xlab("")+TG_theme()+
+  scale_y_continuous(name="% Enhancers identified", expand = c(0,0))+
+  scale_fill_manual(values = c("black", "#78A056"))
+ggsave(path="output/plots/figure1", filename="icea_sup_nf.pdf", plot = icea.sup.nf, device = "pdf", dpi=300)
+
+
+#Fraction of sign element
+Enh.prom.fp$group <- factor(Enh.prom.fp$group, levels=c("proximal", "distal"))
+Enh.prom.fp$method <- factor(Enh.prom.fp$method, levels=c("HOMER", "GREAT", "Overlap","NoProx","ICEA","ICEA_50", "ICEA_25", "ICEA_5"))
+
+icea.sup.fp <-ggplot(data=Enh.prom.fp, aes(x=group, y=value, fill=group)) +
+  geom_bar(stat="identity", position=position_dodge(width = 0.5), width=0.8, color="black")+
+  facet_grid(. ~ method)+
+  xlab("")+TG_theme()+
+  scale_y_continuous(name="% sig.  Enhancers", expand = c(0,0))+
+  scale_fill_manual(values = c("black", "#78A056"))
+ggsave(path="output/plots/figure1", filename="icea_sup_fp.pdf", plot = icea.sup.fp, device = "pdf", dpi=300)
+
+```
+
+
+
+### 1.3.7 Fraction of enhancers with H3K27ac
+Overlap of Enhancers and H3K27ac peaks
+```{bash engine.opts='-l'}
+cd output/data/figure1/
+bash /mnt/data/common/tobias/tg/ICE_A/ICEA_analysis/script/general/bedtools_intersect_wa.sh K562_Enhancers_filtered.bed ../../../data/chip_cnr/GSM733656_hg19_wgEncodeBroadHistoneK562H3k27acStdPk.broadPeak K562_Enhancers_filtered_H3K27ac_overlap.bed
+```
+
+Calculate percentage of enhancers with H3K27ac
+```{r}
+Enh.h3k27ac <- read.table("output/data/figure1/K562_Enhancers_filtered_H3K27ac_overlap.bed", header=F, sep="\t", quote = "")
+
+Enh.Prom.pairs.bed$h3k27ac <- ifelse(Enh.Prom.pairs.bed$peakID %in% Enh.h3k27ac$V4, 1, 0)
+Enh.Prom.pairs.bed$sig <- ifelse(Enh.Prom.pairs.bed$peakID %in% Enh.Prom.pairs[Enh.Prom.pairs$Significant,]$peakID, "Sig", "NoSig")
+Enh.h3k27ac.stats <- table(Enh.Prom.pairs.bed$sig, Enh.Prom.pairs.bed$h3k27ac)
+
+Enh.h3k27ac.stats <- rbind(data.frame(Group="Sig", Perc=Enh.h3k27ac.stats["Sig","1"]/sum(Enh.h3k27ac.stats["Sig",])), 
+                           data.frame(Group="NoSig", Perc=Enh.h3k27ac.stats["NoSig","1"]/sum(Enh.h3k27ac.stats["NoSig",])))
+
+
+plot.Enh.h3k27ac<-ggplot(Enh.h3k27ac.stats , aes(x=Group, y=Perc, fill=Group))+
+  geom_bar(stat="identity", color="black", width = 0.7)+
+  scale_y_continuous(breaks=c(0,0.25, 0.5, 0.75, 1), limits=c(0,1), expand=c(0,0), labels = scales::percent)+
+  TG_theme()+
+  scale_fill_manual(values = c("white", "black"))
+
+ggsave(path="output/plots/figure1", filename="K562_enhancer_H3K27ac.pdf", plot = plot.Enh.h3k27ac, device = "pdf", dpi=300)
+
+```
+
+Fraction of ICE-A identified with H3K27me3
+```{r}
+sum(unique(Enh.Prom.pairs.sig.short[Enh.Prom.pairs.sig.short$ICEA==1,]$peakID) %in% Enh.Prom.pairs.bed[Enh.Prom.pairs.bed$h3k27ac==1,]$peakID)/length(unique(Enh.Prom.pairs.sig.short[Enh.Prom.pairs.sig.short$ICEA==1,]$peakID))
+
+sum(unique(Enh.Prom.pairs.sig.long[Enh.Prom.pairs.sig.long$ICEA==1,]$peakID) %in% Enh.Prom.pairs.bed[Enh.Prom.pairs.bed$h3k27ac==1,]$peakID)/length(unique(Enh.Prom.pairs.sig.long[Enh.Prom.pairs.sig.long$ICEA==1,]$peakID))
+
+sum(unique(Enh.Prom.pairs.sig[Enh.Prom.pairs.sig$ICEA==1,]$peakID) %in% Enh.Prom.pairs.bed[Enh.Prom.pairs.bed$h3k27ac==1,]$peakID)/length(unique(Enh.Prom.pairs.sig[Enh.Prom.pairs.sig$ICEA==1,]$peakID))
+
+```
 
 
 

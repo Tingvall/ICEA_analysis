@@ -159,6 +159,10 @@ GO.plot.Ebf1.d <- GO.plot.Ebf1.d + geom_point(aes(fill=log10(pvalue), color=Clus
 
 ggsave(path="output/plots/figure3/", filename="WTvsEKO_GO_distal.pdf", plot = GO.plot.Ebf1.d, device = "pdf", dpi=300, height=10, width=7)
 
+
+EBF1.anno.exp.pd <- rbind(unique(EBF1.anno.exp.p[,c(1,5,7)]),unique(EBF1.anno.exp.d[,c(1,5,7)]))
+write.table(EBF1.anno.exp.pd, "output/data/figure3/Ebf1_bound.txt", quote = F, sep = "\t", row.names = F, col.names = T)
+
 ```
 
 
